@@ -69,7 +69,11 @@ static void post_run_func (int pid) {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
 
+#ifdef __mips__
+        sa.sa_handler = (__sighandler_t)signal_forwarder;
+#else
         sa.sa_sigaction = signal_forwarder;
+#endif
         sa.sa_flags = SA_SIGINFO;
 
         for (i = 0; i < NELEM(forward_signals); i++) {
