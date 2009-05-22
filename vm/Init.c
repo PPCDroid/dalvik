@@ -894,7 +894,11 @@ static void blockSignals()
         /* TODO: save the old sigaction in a global */
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
+#ifdef __mips__
+        sa.sa_handler = (__sighandler_t)busCatcher;
+#else
         sa.sa_sigaction = busCatcher;
+#endif
         sa.sa_flags = SA_SIGINFO;
         cc = sigaction(SIGBUS, &sa, NULL);
         assert(cc == 0);
