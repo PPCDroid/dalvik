@@ -1,5 +1,5 @@
 /*
- * This file was generated automatically by gen-mterp.py for 'allstubs'.
+ * This file was generated automatically by gen-mterp.py for 'mips'.
  *
  * --> DO NOT EDIT <--
  */
@@ -3010,7 +3010,11 @@ bool dvmMterpStdRun(MterpGlue* glue)
 
         u2 inst = /*glue->*/pc[0];
         Handler handler = (Handler) gDvmMterpHandlers[inst & 0xff];
+#if 0
         LOGVV("handler %p %s\n",
+#else
+        LOGV("handler %p %s\n",
+#endif
             handler, (const char*) gDvmMterpHandlerNames[inst & 0xff]);
         (*handler)(glue);
     }
@@ -3326,8 +3330,9 @@ GOTO_TARGET(invokeInterface, bool methodCallRange)
                 vsrc1 >> 4, ref, vdst, vsrc1 & 0x0f);
             thisPtr = (Object*) GET_REGISTER(vdst & 0x0f);
         }
-        if (!checkForNull(thisPtr))
+        if (!checkForNull(thisPtr)) {
             GOTO_exceptionThrown();
+	}
 
         thisClass = thisPtr->clazz;
 
