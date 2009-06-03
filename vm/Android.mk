@@ -246,10 +246,10 @@ else
 		mterp/out/InterpAsm-x86.S
   else
   ifeq ($(TARGET_ARCH),mips)
-    LOCAL_C_INCLUDES += external/libffi/$(TARGET_OS)-$(TARGET_ARCH)
+    LOCAL_C_INCLUDES += bionic/libc/arch-mips/include
     LOCAL_SRC_FILES += \
-		arch/generic/Call.c \
-		arch/generic/Hints.c
+		arch/mips/Call_o32.S \
+		arch/mips/Hints_o32.c
     LOCAL_SHARED_LIBRARIES += libffi
 	
     LOCAL_SRC_FILES += \
