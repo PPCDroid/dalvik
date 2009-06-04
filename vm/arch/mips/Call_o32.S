@@ -114,7 +114,6 @@ padded, and fix them up appropriately.
  * onto the stack.  Anything requiring more than that -- which should happen
  * rarely to never -- can do the slow signature scan.
  */
-#define __HW_FLOAT 1
 dvmPlatformInvoke:
 	move	t7, sp		/* Original stack pointer */
 	subu	sp, sp, 16	/* Room to save callee saved regs */
@@ -219,13 +218,20 @@ copy_done:
 	lw	t7, 28+16(sp)	/* Get pReturn */
 	addiu	t6, s7, -2	/* No cost due to likely t7 interlock */
 	sw	v0, 0(t7)	/* Always store S4, S8 result */
+#if defined(__mips_hard_float)
 	sw	v1, 4(t7)
-#if defined(__HW_FLOAT)
 	bgtz	t6, void_return	/* Not floats, we are done */
 	addiu	t5, s7, -1
 	beqz	t5, void_return
 	swc1	$f0, 0(t7)
 	swc1	$f1, 4(t7)	/* If we fall through, must be double */
+#elif defined(__mips_soft_float)
+	/* I did this as a way of just ensuring the compiler provided
+	 * one of these two #defines.
+	 */
+	sw	v1, 4(t7)
+#else
+#error "Neither __mips_hard_float or __mips_soft_float defined"
 #endif
 
 void_return:
