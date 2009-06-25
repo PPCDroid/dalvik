@@ -178,7 +178,8 @@ def loadAndEmitOpcodes():
 
     # point dvmAsmInstructionStart at the first handler or stub
     asm_fp.write("\n    .global dvmAsmInstructionStart\n")
-    asm_fp.write("    .type   dvmAsmInstructionStart, %function\n")
+    if target_arch != "mips":
+        asm_fp.write("    .type   dvmAsmInstructionStart, %function\n")
     asm_fp.write("dvmAsmInstructionStart = " + label_prefix + "_OP_NOP\n")
     asm_fp.write("    .text\n\n")
 
@@ -212,7 +213,8 @@ def loadAndEmitOpcodes():
 
     emitSectionComment("Sister implementations", asm_fp)
     asm_fp.write("    .global dvmAsmSisterStart\n")
-    asm_fp.write("    .type   dvmAsmSisterStart, %function\n")
+    if target_arch != "mips":
+        asm_fp.write("    .type   dvmAsmSisterStart, %function\n")
     asm_fp.write("    .text\n")
     asm_fp.write("    .balign 4\n")
     asm_fp.write("dvmAsmSisterStart:\n")

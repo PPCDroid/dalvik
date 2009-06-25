@@ -250,8 +250,6 @@ else
     LOCAL_SRC_FILES += \
 		arch/mips/Call_o32.S \
 		arch/mips/Hints_o32.c
-    LOCAL_SHARED_LIBRARIES += libffi
-	
     LOCAL_SRC_FILES += \
 		mterp/out/InterpC-mips.c \
 		mterp/out/InterpAsm-mips.S

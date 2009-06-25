@@ -43,10 +43,14 @@ bool dvmCheckAsmConstants(void)
     }
 
     /*
-     * If an instruction overflows the 64-byte handler size limit, it will
+     * If an instruction overflows the handler size limit, it will
      * push everything up and alter the total size.  Check it here.
      */
+#ifdef __mips__
+    const int width = 128;
+#else
     const int width = 64;
+#endif
     int interpSize = dvmAsmInstructionEnd - dvmAsmInstructionStart;
     if (interpSize != 0 && interpSize != 256*width) {
         LOGE("ERROR: unexpected asm interp size %d\n", interpSize);
@@ -98,6 +102,7 @@ bool dvmMterpStd(Thread* self, InterpState* glue)
     //LOGI("first instruction is 0x%04x\n", glue->pc[0]);
 
     changeInterp = dvmMterpStdRun(glue);
+
     if (!changeInterp) {
         /* this is a "normal" exit; we're not coming back */
 #ifdef LOG_INSTR
