@@ -1,4 +1,4 @@
-%default {"instr1":"", "result0":"v0", "result1":"v1", "chkzero":"0"}
+%verify "executed"
     /*
      * Generic 64-bit binary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = a0-a1 op a2-a3".
@@ -24,18 +24,18 @@
     addu    s5, rFP, s5                 /* s5<- &fp[CC] */
     lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1 */
     lw      a1, 4(s6)
-    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
     lw      a3, 4(s5)
-    .if $chkzero
-    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
-    beqz    t7, common_errDivideByZero
-    .endif
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    mul	    t3, a3, a0
+    multu   a0, a2
+    mflo    v0
+    mfhi    t1
+    mul     t2, a1, a2
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
-
-    $instr1                             /* Probably several comma separated */
-    $instr2                             /* result<- op */
+    addu    v1, t2, t3
+    addu    v1, v1, t1
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
-    sw      $result0, 0(s4)             /* vAA/vAA+1<- $result0/$result1 */
+    sw      v0, 0(s4)                   /* vAA/vAA+1<- v0/v1 */
     GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
-    sw      $result1, 4(s4)
+    sw      v1, 4(s4)
 

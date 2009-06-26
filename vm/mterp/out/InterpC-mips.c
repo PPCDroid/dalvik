@@ -1232,38 +1232,6 @@ HANDLE_OPCODE(OP_MONITOR_EXIT /*vAA*/)
     FINISH(1);
 OP_END
 
-/* File: c/OP_INSTANCE_OF.c */
-HANDLE_OPCODE(OP_INSTANCE_OF /*vA, vB, class@CCCC*/)
-    {
-        ClassObject* clazz;
-        Object* obj;
-
-        vdst = INST_A(inst);
-        vsrc1 = INST_B(inst);   /* object to check */
-        ref = FETCH(1);         /* class to check against */
-        ILOGV("|instance-of v%d,v%d,class@0x%04x", vdst, vsrc1, ref);
-
-        obj = (Object*)GET_REGISTER(vsrc1);
-        if (obj == NULL) {
-            SET_REGISTER(vdst, 0);
-        } else {
-#if defined(WITH_EXTRA_OBJECT_VALIDATION)
-            if (!checkForNullExportPC(obj, fp, pc))
-                GOTO_exceptionThrown();
-#endif
-            clazz = dvmDexGetResolvedClass(methodClassDex, ref);
-            if (clazz == NULL) {
-                EXPORT_PC();
-                clazz = dvmResolveClass(curMethod->clazz, ref, true);
-                if (clazz == NULL)
-                    GOTO_exceptionThrown();
-            }
-            SET_REGISTER(vdst, dvmInstanceof(obj->clazz, clazz));
-        }
-    }
-    FINISH(2);
-OP_END
-
 /* File: c/OP_NEW_INSTANCE.c */
 HANDLE_OPCODE(OP_NEW_INSTANCE /*vAA, class@BBBB*/)
     {
@@ -1519,48 +1487,12 @@ OP_END
 HANDLE_NUMCONV(OP_DOUBLE_TO_FLOAT,      "double-to-float", _DOUBLE, _FLOAT)
 OP_END
 
-/* File: c/OP_ADD_LONG.c */
-HANDLE_OP_X_LONG(OP_ADD_LONG, "add", +, 0)
-OP_END
-
-/* File: c/OP_SUB_LONG.c */
-HANDLE_OP_X_LONG(OP_SUB_LONG, "sub", -, 0)
-OP_END
-
-/* File: c/OP_MUL_LONG.c */
-HANDLE_OP_X_LONG(OP_MUL_LONG, "mul", *, 0)
-OP_END
-
 /* File: c/OP_DIV_LONG.c */
 HANDLE_OP_X_LONG(OP_DIV_LONG, "div", /, 1)
 OP_END
 
 /* File: c/OP_REM_LONG.c */
 HANDLE_OP_X_LONG(OP_REM_LONG, "rem", %, 2)
-OP_END
-
-/* File: c/OP_AND_LONG.c */
-HANDLE_OP_X_LONG(OP_AND_LONG, "and", &, 0)
-OP_END
-
-/* File: c/OP_OR_LONG.c */
-HANDLE_OP_X_LONG(OP_OR_LONG,  "or", |, 0)
-OP_END
-
-/* File: c/OP_XOR_LONG.c */
-HANDLE_OP_X_LONG(OP_XOR_LONG, "xor", ^, 0)
-OP_END
-
-/* File: c/OP_SHL_LONG.c */
-HANDLE_OP_SHX_LONG(OP_SHL_LONG, "shl", (s8), <<)
-OP_END
-
-/* File: c/OP_SHR_LONG.c */
-HANDLE_OP_SHX_LONG(OP_SHR_LONG, "shr", (s8), >>)
-OP_END
-
-/* File: c/OP_USHR_LONG.c */
-HANDLE_OP_SHX_LONG(OP_USHR_LONG, "ushr", (u8), >>)
 OP_END
 
 /* File: c/OP_ADD_FLOAT.c */
@@ -1625,48 +1557,12 @@ HANDLE_OPCODE(OP_REM_DOUBLE /*vAA, vBB, vCC*/)
     FINISH(2);
 OP_END
 
-/* File: c/OP_ADD_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_ADD_LONG_2ADDR, "add", +, 0)
-OP_END
-
-/* File: c/OP_SUB_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_SUB_LONG_2ADDR, "sub", -, 0)
-OP_END
-
-/* File: c/OP_MUL_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_MUL_LONG_2ADDR, "mul", *, 0)
-OP_END
-
 /* File: c/OP_DIV_LONG_2ADDR.c */
 HANDLE_OP_X_LONG_2ADDR(OP_DIV_LONG_2ADDR, "div", /, 1)
 OP_END
 
 /* File: c/OP_REM_LONG_2ADDR.c */
 HANDLE_OP_X_LONG_2ADDR(OP_REM_LONG_2ADDR, "rem", %, 2)
-OP_END
-
-/* File: c/OP_AND_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_AND_LONG_2ADDR, "and", &, 0)
-OP_END
-
-/* File: c/OP_OR_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_OR_LONG_2ADDR,  "or", |, 0)
-OP_END
-
-/* File: c/OP_XOR_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_XOR_LONG_2ADDR, "xor", ^, 0)
-OP_END
-
-/* File: c/OP_SHL_LONG_2ADDR.c */
-HANDLE_OP_SHX_LONG_2ADDR(OP_SHL_LONG_2ADDR, "shl", (s8), <<)
-OP_END
-
-/* File: c/OP_SHR_LONG_2ADDR.c */
-HANDLE_OP_SHX_LONG_2ADDR(OP_SHR_LONG_2ADDR, "shr", (s8), >>)
-OP_END
-
-/* File: c/OP_USHR_LONG_2ADDR.c */
-HANDLE_OP_SHX_LONG_2ADDR(OP_USHR_LONG_2ADDR, "ushr", (u8), >>)
 OP_END
 
 /* File: c/OP_ADD_FLOAT_2ADDR.c */
@@ -1719,50 +1615,6 @@ HANDLE_OPCODE(OP_REM_DOUBLE_2ADDR /*vA, vB*/)
     SET_REGISTER_DOUBLE(vdst,
         fmod(GET_REGISTER_DOUBLE(vdst), GET_REGISTER_DOUBLE(vsrc1)));
     FINISH(1);
-OP_END
-
-/* File: c/OP_UNUSED_E3.c */
-HANDLE_OPCODE(OP_UNUSED_E3)
-OP_END
-
-/* File: c/OP_UNUSED_E4.c */
-HANDLE_OPCODE(OP_UNUSED_E4)
-OP_END
-
-/* File: c/OP_UNUSED_E5.c */
-HANDLE_OPCODE(OP_UNUSED_E5)
-OP_END
-
-/* File: c/OP_UNUSED_E6.c */
-HANDLE_OPCODE(OP_UNUSED_E6)
-OP_END
-
-/* File: c/OP_UNUSED_E7.c */
-HANDLE_OPCODE(OP_UNUSED_E7)
-OP_END
-
-/* File: c/OP_UNUSED_E8.c */
-HANDLE_OPCODE(OP_UNUSED_E8)
-OP_END
-
-/* File: c/OP_UNUSED_E9.c */
-HANDLE_OPCODE(OP_UNUSED_E9)
-OP_END
-
-/* File: c/OP_UNUSED_EA.c */
-HANDLE_OPCODE(OP_UNUSED_EA)
-OP_END
-
-/* File: c/OP_UNUSED_EB.c */
-HANDLE_OPCODE(OP_UNUSED_EB)
-OP_END
-
-/* File: c/OP_UNUSED_EC.c */
-HANDLE_OPCODE(OP_UNUSED_EC)
-OP_END
-
-/* File: c/OP_UNUSED_ED.c */
-HANDLE_OPCODE(OP_UNUSED_ED)
 OP_END
 
 /* File: c/OP_EXECUTE_INLINE.c */
@@ -1825,10 +1677,6 @@ HANDLE_OPCODE(OP_EXECUTE_INLINE /*vB, {vD, vE, vF, vG}, inline@CCCC*/)
     FINISH(3);
 OP_END
 
-/* File: c/OP_UNUSED_EF.c */
-HANDLE_OPCODE(OP_UNUSED_EF)
-OP_END
-
 /* File: c/OP_INVOKE_DIRECT_EMPTY.c */
 HANDLE_OPCODE(OP_INVOKE_DIRECT_EMPTY /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
 #if INTERP_TYPE != INTERP_DBG
@@ -1844,10 +1692,6 @@ HANDLE_OPCODE(OP_INVOKE_DIRECT_EMPTY /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
         GOTO_invoke(invokeDirect, false);
     }
 #endif
-OP_END
-
-/* File: c/OP_UNUSED_F1.c */
-HANDLE_OPCODE(OP_UNUSED_F1)
 OP_END
 
 /* File: c/OP_IGET_QUICK.c */
@@ -1892,28 +1736,6 @@ OP_END
 /* File: c/OP_INVOKE_SUPER_QUICK_RANGE.c */
 HANDLE_OPCODE(OP_INVOKE_SUPER_QUICK_RANGE /*{vCCCC..v(CCCC+AA-1)}, meth@BBBB*/)
     GOTO_invoke(invokeSuperQuick, true);
-OP_END
-
-/* File: c/OP_UNUSED_FC.c */
-HANDLE_OPCODE(OP_UNUSED_FC)
-OP_END
-
-/* File: c/OP_UNUSED_FD.c */
-HANDLE_OPCODE(OP_UNUSED_FD)
-OP_END
-
-/* File: c/OP_UNUSED_FE.c */
-HANDLE_OPCODE(OP_UNUSED_FE)
-OP_END
-
-/* File: c/OP_UNUSED_FF.c */
-HANDLE_OPCODE(OP_UNUSED_FF)
-    /*
-     * In portable interp, most unused opcodes will fall through to here.
-     */
-    LOGE("unknown opcode 0x%02x\n", INST_INST(inst));
-    dvmAbort();
-    FINISH(1);
 OP_END
 
 /* File: c/gotoTargets.c */
