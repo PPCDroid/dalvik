@@ -1487,14 +1487,6 @@ OP_END
 HANDLE_NUMCONV(OP_DOUBLE_TO_FLOAT,      "double-to-float", _DOUBLE, _FLOAT)
 OP_END
 
-/* File: c/OP_DIV_LONG.c */
-HANDLE_OP_X_LONG(OP_DIV_LONG, "div", /, 1)
-OP_END
-
-/* File: c/OP_REM_LONG.c */
-HANDLE_OP_X_LONG(OP_REM_LONG, "rem", %, 2)
-OP_END
-
 /* File: c/OP_ADD_FLOAT.c */
 HANDLE_OP_X_FLOAT(OP_ADD_FLOAT, "add", +)
 OP_END

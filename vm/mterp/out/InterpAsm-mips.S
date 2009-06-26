@@ -4256,29 +4256,99 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_DIV_LONG: /* 0x9e */
-    /* stub for OP_DIV_LONG */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DIV_LONG  /* call */
+/* File: mips/OP_DIV_LONG.S */
+    /*
+     * Generic 64-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0-a1 op a2-a3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
+     *      xor-long, add-double, sub-double, mul-double, div-double,
+     *      rem-double
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    andi    s6, a0, 255                 /* s6<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
+    sll     s6, s6, 2
+    addu    s6, rFP, s6                 /* s6<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    lw      a3, 4(s5)			/* divisor */
+    lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1, dividend */
+    or      t1, a2, a3
+    beqz    t1, common_errDivideByZero
+    lw      a1, 4(s6)
+    beqz    a0, testneg_OP_DIV_LONG
+    lui     t4, 0x8000
+divit_OP_DIV_LONG:
+    LA(t9, __divdi3)
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    nop
+
+store_OP_DIV_LONG:
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_REM_LONG: /* 0x9f */
-    /* stub for OP_REM_LONG */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_REM_LONG  /* call */
+/* File: mips/OP_REM_LONG.S */
+    /*
+     * Generic 64-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0-a1 op a2-a3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
+     *      xor-long, add-double, sub-double, mul-double, div-double,
+     *      rem-double
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    andi    s6, a0, 255                 /* s6<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
+    sll     s6, s6, 2
+    addu    s6, rFP, s6                 /* s6<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    lw      a3, 4(s5)			/* divisor */
+    lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1, dividend */
+    or      t1, a2, a3
+    beqz    t1, common_errDivideByZero
+    lw      a1, 4(s6)
+    beqz    a0, testneg_OP_REM_LONG
+    lui     t4, 0x8000
+divit_OP_REM_LONG:
+    LA(t9, __moddi3)
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    nop
+
+store_OP_REM_LONG:
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_AND_LONG: /* 0xa0 */
@@ -4365,7 +4435,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     or     v0, a0, a2                             /* Probably several comma separated */
-    or      v0, a1, a3                             /* result<- op */
+    or      v1, a1, a3                             /* result<- op */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
     sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
     GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
@@ -4412,7 +4482,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     xor     v0, a0, a2                             /* Probably several comma separated */
-    xor      v0, a1, a3                             /* result<- op */
+    xor      v1, a1, a3                             /* result<- op */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
     sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
     GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
@@ -5279,7 +5349,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
 
     and     v0, a0, a2                             /* optional op */
-    and      v0, a1, a3                             /* result<- op */
+    and      v1, a1, a3                             /* result<- op */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
     sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
     GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
@@ -5324,7 +5394,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
 
     or     v0, a0, a2                             /* optional op */
-    or      v0, a1, a3                             /* result<- op */
+    or      v1, a1, a3                             /* result<- op */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
     sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
     GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
@@ -5369,7 +5439,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
 
     xor     v0, a0, a2                             /* optional op */
-    xor      v0, a1, a3                             /* result<- op */
+    xor      v1, a1, a3                             /* result<- op */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
     sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
     GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
@@ -7016,6 +7086,30 @@ dvmAsmSisterStart:
      */
 .LOP_SGET_WIDE_resolve:
 
+
+/* continuation for OP_DIV_LONG */
+
+testneg_OP_DIV_LONG:
+    bne     a1, t4, divit_OP_DIV_LONG
+    li      t5, 0xffff
+    bne     a2, t5, divit_OP_DIV_LONG
+    nop
+    bne     a3, t5, divit_OP_DIV_LONG
+    move    v0, zero
+    b       store_OP_DIV_LONG
+    lui     v1, 0x8000
+
+/* continuation for OP_REM_LONG */
+
+testneg_OP_REM_LONG:
+    bne     a1, t4, divit_OP_REM_LONG
+    li      t5, 0xffff
+    bne     a2, t5, divit_OP_REM_LONG
+    nop
+    bne     a3, t5, divit_OP_REM_LONG
+    move    v0, zero
+    b       store_OP_REM_LONG
+    move    v1, zero
 
     .size   dvmAsmSisterStart, .-dvmAsmSisterStart
     .global dvmAsmSisterEnd
