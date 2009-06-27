@@ -1145,29 +1145,99 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_CMPL_FLOAT: /* 0x2d */
-    /* stub for OP_CMPL_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_CMPL_FLOAT  /* call */
+/* File: mips/OP_CMPL_FLOAT.S */
+    /*
+     * Compare two floating-point values.  Puts 0, 1, or -1 into the
+     * destination register based on the results of the comparison.
+     *
+     * The operation we're implementing is:
+     *   if (x == y)
+     *     return 0;
+     *   else if (x < y)
+     *     return -1;
+     *   else if (x > y)
+     *     return 1;
+     *   else
+     *     return {-1,1};  // one or both operands was NaN
+     *
+     * for: cmpl-float, cmpg-float
+     * I think __eqsf2, gives me what I want, but isn't documented to do so.
+     */
+    /* op vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* r0<- CCBB */
+    andi    t5, a0, 255                 /* t5<- BB */
+    srl     t6, a0, 8                   /* t6<- CC */
+    GET_VREG(s4, t5)                    /* s4<- vBB */
+    GET_VREG(s5, t6)                    /* s5<- vCC */
+    LA(t9, __eqsf2)
+    move    a0, s4
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    move    a1, s5
+    beqz    v0, .LOP_CMPL_FLOAT_finish	/* Branch if equal */
+    LA(t9, __ltsf2)
+    move    a0, s4
+    jalr    t9
+    move    a1, s5
+    bltz    v0, .LOP_CMPL_FLOAT_finish	/* Branch if less than */
+    li      v0, -1
+    LA(t9, __gtsf2)
+    move    a0, s4
+    jalr    t9
+    move    a1, s5
+    blez    v0, .LOP_CMPL_FLOAT_finish	/* Branch if NaN */
+    li      v0, -1			/* NaN return */
+    b       .LOP_CMPL_FLOAT_finish		/* Branch if greater */
+    li      v0, 1			/* Greater than return */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_CMPG_FLOAT: /* 0x2e */
-    /* stub for OP_CMPG_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_CMPG_FLOAT  /* call */
+/* File: mips/OP_CMPG_FLOAT.S */
+    /*
+     * Compare two floating-point values.  Puts 0, 1, or -1 into the
+     * destination register based on the results of the comparison.
+     *
+     * The operation we're implementing is:
+     *   if (x == y)
+     *     return 0;
+     *   else if (x < y)
+     *     return -1;
+     *   else if (x > y)
+     *     return 1;
+     *   else
+     *     return {-1,1};  // one or both operands was NaN
+     *
+     * for: cmpl-float, cmpg-float
+     */
+    /* op vAA, vBB, vCC */
+    FETCH_B(t5, 1, 0)                   /* t5<- BB */
+    FETCH_B(t6, 1, 1)                   /* t6<- CC */
+    GET_VREG(s4, t5)                    /* s4<- vBB */
+    GET_VREG(s5, t6)                    /* s5<- vCC */
+    LA(t9, __eqsf2)
+    move    a0, s4
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    move    a1, s5
+    beqz    v0, .LOP_CMPG_FLOAT_finish	/* Branch if equal */
+    LA(t9, __ltsf2)
+    move    a0, s4
+    jalr    t9
+    move    a1, s5
+
+    slt     t5, v0, 0
+    li      v0, -1			/* Value is less-than */
+    li      v1, 1			/* Value is greater-than or NaN */
+    movz    v0, v1, t5
+
+.LOP_CMPG_FLOAT_finish:
+    srl     s4, rINST, 8                /* s4<- AA */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_CMPL_DOUBLE: /* 0x2f */
@@ -5289,29 +5359,97 @@ store_OP_REM_LONG:
 /* ------------------------------ */
     .balign 128
 .L_OP_DIV_LONG_2ADDR: /* 0xbe */
-    /* stub for OP_DIV_LONG_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DIV_LONG_2ADDR  /* call */
+/* File: mips/OP_DIV_LONG_2ADDR.S */
+    /*
+     * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = r0-r1 op r2-r3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-long/2addr, sub-long/2addr, div-long/2addr, rem-long/2addr,
+     *      and-long/2addr, or-long/2addr, xor-long/2addr, add-double/2addr,
+     *      sub-double/2addr, mul-double/2addr, div-double/2addr,
+     *      rem-double/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8               /* s4<- A+ */
+    srl     s5, rINST, 12              /* s5<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    lw      a3, 4(s5)                   /* a2/a3<- vBB/vBB+1, divisor */
+    lw      a2, 0(s5)
+    lw      a0, 0(s4)                   /* a0/a1<- vAA/vAA+1, dividend */
+    or      t1, a2, a3
+    beqz    t1, common_errDivideByZero
+    lw      a1, 4(s4)
+    beqz    a0, testneg_OP_DIV_LONG_2ADDR
+    lui     t4, 0x8000
+divit_OP_DIV_LONG_2ADDR:
+    LA(t9, __divdi3)
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    nop
+
+store_OP_DIV_LONG_2ADDR:
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_REM_LONG_2ADDR: /* 0xbf */
-    /* stub for OP_REM_LONG_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_REM_LONG_2ADDR  /* call */
+/* File: mips/OP_REM_LONG_2ADDR.S */
+    /*
+     * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = r0-r1 op r2-r3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-long/2addr, sub-long/2addr, div-long/2addr, rem-long/2addr,
+     *      and-long/2addr, or-long/2addr, xor-long/2addr, add-double/2addr,
+     *      sub-double/2addr, mul-double/2addr, div-double/2addr,
+     *      rem-double/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8               /* s4<- A+ */
+    srl     s5, rINST, 12              /* s5<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    lw      a3, 4(s5)                   /* a2/a3<- vBB/vBB+1, divisor */
+    lw      a2, 0(s5)
+    lw      a0, 0(s4)                   /* a0/a1<- vAA/vAA+1, dividend */
+    or      t1, a2, a3
+    beqz    t1, common_errDivideByZero
+    lw      a1, 4(s4)
+    beqz    a0, testneg_OP_REM_LONG_2ADDR
+    lui     t4, 0x8000
+divit_OP_REM_LONG_2ADDR:
+    LA(t9, __moddi3)
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    nop
+
+store_OP_REM_LONG_2ADDR:
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_AND_LONG_2ADDR: /* 0xc0 */
@@ -6798,6 +6936,16 @@ dvmAsmSisterStart:
     lw      a0, offObject_clazz(a0)     /* a0<- obj->clazz */
 
 
+/* continuation for OP_CMPL_FLOAT */
+
+.LOP_CMPL_FLOAT_finish:
+    srl     s4, rINST, 8                /* s4<- AA */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* continuation for OP_IGET */
 
 .LOP_IGET_finish:
@@ -7109,6 +7257,30 @@ testneg_OP_REM_LONG:
     bne     a3, t5, divit_OP_REM_LONG
     move    v0, zero
     b       store_OP_REM_LONG
+    move    v1, zero
+
+/* continuation for OP_DIV_LONG_2ADDR */
+
+testneg_OP_DIV_LONG_2ADDR:
+    bne     a1, t4, divit_OP_DIV_LONG_2ADDR
+    li      t5, 0xffff
+    bne     a2, t5, divit_OP_DIV_LONG_2ADDR
+    nop
+    bne     a3, t5, divit_OP_DIV_LONG_2ADDR
+    move    v0, zero
+    b       store_OP_DIV_LONG_2ADDR
+    lui     v1, 0x8000
+
+/* continuation for OP_REM_LONG_2ADDR */
+
+testneg_OP_REM_LONG_2ADDR:
+    bne     a1, t4, divit_OP_REM_LONG_2ADDR
+    li      t5, 0xffff
+    bne     a2, t5, divit_OP_REM_LONG_2ADDR
+    nop
+    bne     a3, t5, divit_OP_REM_LONG_2ADDR
+    move    v0, zero
+    b       store_OP_REM_LONG_2ADDR
     move    v1, zero
 
     .size   dvmAsmSisterStart, .-dvmAsmSisterStart

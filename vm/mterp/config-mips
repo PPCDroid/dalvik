@@ -86,8 +86,8 @@ op-start c
     op OP_GOTO_32 mips
 #    op OP_PACKED_SWITCH mips
 #    op OP_SPARSE_SWITCH mips
-#    op OP_CMPL_FLOAT mips
-#    op OP_CMPG_FLOAT mips
+    op OP_CMPL_FLOAT mips
+    op OP_CMPG_FLOAT mips
 #    op OP_CMPL_DOUBLE mips
 #    op OP_CMPG_DOUBLE mips
     op OP_CMP_LONG mips
@@ -199,8 +199,8 @@ op-start c
     op OP_ADD_LONG mips
     op OP_SUB_LONG mips
     op OP_MUL_LONG mips
-#    op OP_DIV_LONG mips
-#    op OP_REM_LONG mips
+    op OP_DIV_LONG mips
+    op OP_REM_LONG mips
     op OP_AND_LONG mips
     op OP_OR_LONG mips
     op OP_XOR_LONG mips
@@ -231,8 +231,8 @@ op-start c
     op OP_ADD_LONG_2ADDR mips
     op OP_SUB_LONG_2ADDR mips
     op OP_MUL_LONG_2ADDR mips
-#    op OP_DIV_LONG_2ADDR mips
-#    op OP_REM_LONG_2ADDR mips
+    op OP_DIV_LONG_2ADDR mips
+    op OP_REM_LONG_2ADDR mips
     op OP_AND_LONG_2ADDR mips
     op OP_OR_LONG_2ADDR mips
     op OP_XOR_LONG_2ADDR mips

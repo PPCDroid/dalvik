@@ -1387,14 +1387,6 @@ HANDLE_OPCODE(OP_SPARSE_SWITCH /*vAA, +BBBB*/)
     }
 OP_END
 
-/* File: c/OP_CMPL_FLOAT.c */
-HANDLE_OP_CMPX(OP_CMPL_FLOAT, "l-float", float, _FLOAT, -1)
-OP_END
-
-/* File: c/OP_CMPG_FLOAT.c */
-HANDLE_OP_CMPX(OP_CMPG_FLOAT, "g-float", float, _FLOAT, 1)
-OP_END
-
 /* File: c/OP_CMPL_DOUBLE.c */
 HANDLE_OP_CMPX(OP_CMPL_DOUBLE, "l-double", double, _DOUBLE, -1)
 OP_END
@@ -1547,14 +1539,6 @@ HANDLE_OPCODE(OP_REM_DOUBLE /*vAA, vBB, vCC*/)
             fmod(GET_REGISTER_DOUBLE(vsrc1), GET_REGISTER_DOUBLE(vsrc2)));
     }
     FINISH(2);
-OP_END
-
-/* File: c/OP_DIV_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_DIV_LONG_2ADDR, "div", /, 1)
-OP_END
-
-/* File: c/OP_REM_LONG_2ADDR.c */
-HANDLE_OP_X_LONG_2ADDR(OP_REM_LONG_2ADDR, "rem", %, 2)
 OP_END
 
 /* File: c/OP_ADD_FLOAT_2ADDR.c */
