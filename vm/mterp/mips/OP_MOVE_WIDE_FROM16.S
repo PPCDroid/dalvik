@@ -2,7 +2,7 @@
     /* move-wide/from16 vAA, vBBBB */
     FETCH(a3, 1)                        /* r3<- BBBB */
     srl     a2, rINST, 6                /* a2<- AA */
-    andi    a2, a2, 0x3c
+    andi    a2, a2, 0x3fc		/* a2<-AA*4 */
     sll     a3, a3, 2
     addu    a2, rFP, a2                 /* a2<- &fp[AA] */
     addu    a3, rFP, a3                 /* r3<- &fp[BBBB] */

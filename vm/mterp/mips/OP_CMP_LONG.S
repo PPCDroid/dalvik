@@ -17,20 +17,25 @@
     lw      a1, 4(t5)
     lw      a3, 4(t6)
     lw      a0, 0(t5)                   /* a0/a1<- vBB/vBB+1 */
-    subu    t4, a1, a3                  /* compare (vBB+1, vCC+1) */
+    beq     a1, a3, .L${opcode}_hieq    /* high part equal */
     lw      a2, 0(t6)                   /* a2/a3<- vCC/vCC+1 */
-    bltz    t4, .L${opcode}_finish      /* signed compare on high part */
-    li      v0, -1			/* a1 < a3 */
+    slt     t4, a1, a3			/* signed compare upper part */
     bgtz    t4, .L${opcode}_finish
+    li      v0, -1			/* a1 < a3 */
+    b       .L${opcode}_finish
     li      v0, 1			/* a1 > a3 */
 
+.L${opcode}_hieq:
     /* High parts are equal, compare low parts */
-    subu    t4, a0, a2                  /* t4<- a0 - a2 */
-    bltz    t4, .L${opcode}_finish      /* unsigned compare on low part */
+    beq     a0, a2, .L${opcode}_finish
+    move    v0, zero
+    sltu    t4, a0, a2                  /* t4<- a0 - a2 */
+    bgtz    t4, .L${opcode}_finish      /* unsigned compare on low part */
     li      v0, -1			/* a0 < a2 */
-    bgtz    t4, .L${opcode}_finish
-    li      v0, 1			/* a0 <>a2 */
-    move    v0, zero			/* a0/a1 == a2/a3 */
+    b       .L${opcode}_finish
+    li      v0, 1			/* a0 > a2 */
+
+%break
 
 .L${opcode}_finish:
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */

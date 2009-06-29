@@ -395,7 +395,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     /* move-wide/from16 vAA, vBBBB */
     FETCH(a3, 1)                        /* r3<- BBBB */
     srl     a2, rINST, 6                /* a2<- AA */
-    andi    a2, a2, 0x3c
+    andi    a2, a2, 0x3fc		/* a2<-AA*4 */
     sll     a3, a3, 2
     addu    a2, rFP, a2                 /* a2<- &fp[AA] */
     addu    a3, rFP, a3                 /* r3<- &fp[BBBB] */
@@ -422,10 +422,10 @@ dvmAsmInstructionStart = .L_OP_NOP
     lw      t4, 0(a3)                   /* t4/t5<- fp[BBBB] */
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
     lw      t5, 4(a3)
-    sw      t4, 0(a2)                   /* fp[AAAA]<- t4/t5 */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      t4, 0(a2)                   /* fp[AAAA]<- t4/t5 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
     sw      t5, 4(a2)
-    GOTO_OPCODE(t7)                     /* jump to next instruction */
 
 
 /* ------------------------------ */
@@ -578,7 +578,7 @@ dvmAsmInstructionStart = .L_OP_NOP
      */
     /* return-wide vAA */
     srl     a2, rINST, 6               /* a2<- AA */
-    andi    a2, a2, 0x3c
+    andi    a2, a2, 0x3fc	       /* a2<- AA*4 */
     add     a2, rFP, a2                /* a2<- &fp[AA] */
     add     a3, rGLUE, offGlue_retval  /* a3<- &glue->retval */
     lw      a0, 0(a2)                  /* a0/a1 <- vAA/vAA+1 */
@@ -1283,26 +1283,23 @@ dvmAsmInstructionStart = .L_OP_NOP
     lw      a1, 4(t5)
     lw      a3, 4(t6)
     lw      a0, 0(t5)                   /* a0/a1<- vBB/vBB+1 */
-    subu    t4, a1, a3                  /* compare (vBB+1, vCC+1) */
+    beq     a1, a3, .LOP_CMP_LONG_hieq    /* high part equal */
     lw      a2, 0(t6)                   /* a2/a3<- vCC/vCC+1 */
-    bltz    t4, .LOP_CMP_LONG_finish      /* signed compare on high part */
-    li      v0, -1			/* a1 < a3 */
+    slt     t4, a1, a3			/* signed compare upper part */
     bgtz    t4, .LOP_CMP_LONG_finish
+    li      v0, -1			/* a1 < a3 */
+    b       .LOP_CMP_LONG_finish
     li      v0, 1			/* a1 > a3 */
 
+.LOP_CMP_LONG_hieq:
     /* High parts are equal, compare low parts */
-    subu    t4, a0, a2                  /* t4<- a0 - a2 */
-    bltz    t4, .LOP_CMP_LONG_finish      /* unsigned compare on low part */
+    beq     a0, a2, .LOP_CMP_LONG_finish
+    move    v0, zero
+    sltu    t4, a0, a2                  /* t4<- a0 - a2 */
+    bgtz    t4, .LOP_CMP_LONG_finish      /* unsigned compare on low part */
     li      v0, -1			/* a0 < a2 */
-    bgtz    t4, .LOP_CMP_LONG_finish
-    li      v0, 1			/* a0 <>a2 */
-    move    v0, zero			/* a0/a1 == a2/a3 */
-
-.LOP_CMP_LONG_finish:
-    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
-    SET_VREG(v0, s4)                    /* vAA<- v0 */
-    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
-    GOTO_OPCODE(t7)                     /* jump to next instruction */
+    b       .LOP_CMP_LONG_finish
+    li      v0, 1			/* a0 > a2 */
 
 
 /* ------------------------------ */
@@ -1367,7 +1364,6 @@ dvmAsmInstructionStart = .L_OP_NOP
     .balign 128
 .L_OP_IF_LT: /* 0x34 */
 /* File: mips/OP_IF_LT.S */
-/* File: mips/bincmp.S */
     /*
      * Generic two-operand compare-and-branch operation.  Provide a "revcmp"
      * fragment that specifies the *reverse* comparison to perform, e.g.
@@ -1381,10 +1377,13 @@ dvmAsmInstructionStart = .L_OP_NOP
     andi    a0, a0, 15
     GET_VREG(a3, a1)                   /* a3<- vB */
     GET_VREG(a2, a0)                   /* a2<- vA */
+    slt     t6, a2, a3                 /* compare vA < vB, (vA < vB) */
+    bnez    t6, 2f                     /* we branch to do branch if so */
     li      s4, 4                      /* s4<- BYTE branch dist for not-taken */
-    subu    t6, a2, a3                 /* compare (vA, vB) */
-    bgez  t6, 1f                 /* branch to 1 if comparison failed */
+    b       1f
     nop
+
+2:
     FETCH_S(s4, 1)                     /* s4<- branch offset, in code units */
     sll     s4, s4, 1                  /* convert to bytes, check sign */
     bltz    s4, common_backwardBranch  /* yes, do periodic checks */
@@ -1392,14 +1391,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 1:  FETCH_ADVANCE_INST_RB(s4)          /* update rPC, load rINST */
     GET_INST_OPCODE(t7)                /* extract opcode from rINST */
     GOTO_OPCODE(t7)                    /* jump to next instruction */
-
 
 
 /* ------------------------------ */
     .balign 128
 .L_OP_IF_GE: /* 0x35 */
 /* File: mips/OP_IF_GE.S */
-/* File: mips/bincmp.S */
     /*
      * Generic two-operand compare-and-branch operation.  Provide a "revcmp"
      * fragment that specifies the *reverse* comparison to perform, e.g.
@@ -1413,10 +1410,10 @@ dvmAsmInstructionStart = .L_OP_NOP
     andi    a0, a0, 15
     GET_VREG(a3, a1)                   /* a3<- vB */
     GET_VREG(a2, a0)                   /* a2<- vA */
+    slt     t6, a2, a3                 /* compare vA >= vB, !(vA < vB) */
+    bnez    t6, 1f                     /* we branch to 1 if so */
     li      s4, 4                      /* s4<- BYTE branch dist for not-taken */
-    subu    t6, a2, a3                 /* compare (vA, vB) */
-    bltz  t6, 1f                 /* branch to 1 if comparison failed */
-    nop
+
     FETCH_S(s4, 1)                     /* s4<- branch offset, in code units */
     sll     s4, s4, 1                  /* convert to bytes, check sign */
     bltz    s4, common_backwardBranch  /* yes, do periodic checks */
@@ -1424,14 +1421,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 1:  FETCH_ADVANCE_INST_RB(s4)          /* update rPC, load rINST */
     GET_INST_OPCODE(t7)                /* extract opcode from rINST */
     GOTO_OPCODE(t7)                    /* jump to next instruction */
-
 
 
 /* ------------------------------ */
     .balign 128
 .L_OP_IF_GT: /* 0x36 */
 /* File: mips/OP_IF_GT.S */
-/* File: mips/bincmp.S */
     /*
      * Generic two-operand compare-and-branch operation.  Provide a "revcmp"
      * fragment that specifies the *reverse* comparison to perform, e.g.
@@ -1445,10 +1440,13 @@ dvmAsmInstructionStart = .L_OP_NOP
     andi    a0, a0, 15
     GET_VREG(a3, a1)                   /* a3<- vB */
     GET_VREG(a2, a0)                   /* a2<- vA */
+    slt     t6, a3, a2                 /* compare vA > vB, (vB < vA) */
+    bnez    t6, 2f                     /* we branch to do branch if so */
     li      s4, 4                      /* s4<- BYTE branch dist for not-taken */
-    subu    t6, a2, a3                 /* compare (vA, vB) */
-    blez  t6, 1f                 /* branch to 1 if comparison failed */
+    b       1f
     nop
+
+2:
     FETCH_S(s4, 1)                     /* s4<- branch offset, in code units */
     sll     s4, s4, 1                  /* convert to bytes, check sign */
     bltz    s4, common_backwardBranch  /* yes, do periodic checks */
@@ -1456,14 +1454,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 1:  FETCH_ADVANCE_INST_RB(s4)          /* update rPC, load rINST */
     GET_INST_OPCODE(t7)                /* extract opcode from rINST */
     GOTO_OPCODE(t7)                    /* jump to next instruction */
-
 
 
 /* ------------------------------ */
     .balign 128
 .L_OP_IF_LE: /* 0x37 */
 /* File: mips/OP_IF_LE.S */
-/* File: mips/bincmp.S */
     /*
      * Generic two-operand compare-and-branch operation.  Provide a "revcmp"
      * fragment that specifies the *reverse* comparison to perform, e.g.
@@ -1477,10 +1473,10 @@ dvmAsmInstructionStart = .L_OP_NOP
     andi    a0, a0, 15
     GET_VREG(a3, a1)                   /* a3<- vB */
     GET_VREG(a2, a0)                   /* a2<- vA */
+    slt     t6, a3, a2                 /* compare vA <= vB, !(vB < vA) */
+    bnez    t6, 1f                     /* we branch to 1 if not */
     li      s4, 4                      /* s4<- BYTE branch dist for not-taken */
-    subu    t6, a2, a3                 /* compare (vA, vB) */
-    bgtz  t6, 1f                 /* branch to 1 if comparison failed */
-    nop
+
     FETCH_S(s4, 1)                     /* s4<- branch offset, in code units */
     sll     s4, s4, 1                  /* convert to bytes, check sign */
     bltz    s4, common_backwardBranch  /* yes, do periodic checks */
@@ -1488,7 +1484,6 @@ dvmAsmInstructionStart = .L_OP_NOP
 1:  FETCH_ADVANCE_INST_RB(s4)          /* update rPC, load rINST */
     GET_INST_OPCODE(t7)                /* extract opcode from rINST */
     GOTO_OPCODE(t7)                    /* jump to next instruction */
-
 
 
 /* ------------------------------ */
@@ -6940,6 +6935,15 @@ dvmAsmSisterStart:
 
 .LOP_CMPL_FLOAT_finish:
     srl     s4, rINST, 8                /* s4<- AA */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+/* continuation for OP_CMP_LONG */
+
+.LOP_CMP_LONG_finish:
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
     SET_VREG(v0, s4)                    /* vAA<- v0 */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */

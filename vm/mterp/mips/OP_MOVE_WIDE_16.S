@@ -9,8 +9,8 @@
     lw      t4, 0(a3)                   /* t4/t5<- fp[BBBB] */
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
     lw      t5, 4(a3)
-    sw      t4, 0(a2)                   /* fp[AAAA]<- t4/t5 */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      t4, 0(a2)                   /* fp[AAAA]<- t4/t5 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
     sw      t5, 4(a2)
-    GOTO_OPCODE(t7)                     /* jump to next instruction */
 
