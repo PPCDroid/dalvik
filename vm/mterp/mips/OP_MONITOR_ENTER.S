@@ -11,9 +11,8 @@
     EXPORT_PC()                       /* export PC so we can grab stack trace */
 #endif
     beqz    a1, common_errNullObject  /* null object, throw an exception */
-    nop
-    FETCH_ADVANCE_INST(1)             /* advance rPC, load rINST */
     LA(t9,dvmLockObject)              /* call(self, obj) */
+    FETCH_ADVANCE_INST(1)             /* advance rPC, load rINST */
     jalr    t9
     nop
 #ifdef WITH_DEADLOCK_PREDICTION /* implies WITH_MONITOR_TRACKING */

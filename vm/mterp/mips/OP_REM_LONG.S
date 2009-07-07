@@ -46,7 +46,7 @@ store_${opcode}:
 
 testneg_${opcode}:
     bne     a1, t4, divit_${opcode}
-    li      t5, 0xffff
+    li      t5, -1
     bne     a2, t5, divit_${opcode}
     nop
     bne     a3, t5, divit_${opcode}

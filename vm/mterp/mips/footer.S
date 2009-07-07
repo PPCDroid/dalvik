@@ -310,14 +310,14 @@ common_returnFromMethod:
 .LreturnNew:
     li      a0, kInterpEntryReturn
     bal     common_periodicChecks
-    li      s4, 0
+    move    s4, zero
 
     SAVEAREA_FROM_FP(a0, rFP)           /* a0<- saveArea (old) */
     lw      rFP, offStackSaveArea_prevFrame(a0) /* fp = saveArea->prevFrame */
     lw      a2, (offStackSaveArea_method - sizeofStackSaveArea)(rFP)
                                         /* a2<- method we're returning to */
     beqz    a2, common_gotoBail         /* break frame, bail out completely */
-    li      a1, 0                       /* "want switch" = false */
+    move    a1, zero                    /* "want switch" = false */
 
     lw      rPC, offStackSaveArea_savedPc(a0) /* pc = saveArea->savedPc */
     lw      a3, offGlue_self(rGLUE)      /* a3<- glue->self */
@@ -343,7 +343,7 @@ common_exceptionThrown:
 .LexceptionNew:
     li      a0, kInterpEntryThrow
     bal     common_periodicChecks
-    li      s4, 0
+    move    s4, zero
 
     lw      s4, offGlue_self(rGLUE)     /* s4<- glue->self */
     lw      s5, offThread_exception(s4) /* s5<- self->exception */
@@ -355,7 +355,7 @@ common_exceptionThrown:
     move    a0, s5                      /* a0<- exception */
     addiu   sp, sp, 16			/* deallocate call stack */
 
-    li      a3, 0                       /* a3<- NULL */
+    move    a3, zero                    /* a3<- NULL */
     sw      a3, offThread_exception(s4) /* self->exception = NULL */
 
     /* Make the function call
@@ -368,7 +368,7 @@ common_exceptionThrown:
     move    v0, sp	    
     addiu   sp, sp, -20			/* &fp, arg3 - arg0 */
     sw	    v0, 16(sp)			/* &fp */
-    li      a3, 0                       /*  a3<- false */
+    move    a3, zero                    /*  a3<- false */
     lw      a1, offGlue_method(rGLUE)   /*  a1<- glue->method */
     move    a0, s4                      /*  a0<- self */
     lw      a1, offMethod_insns(a1)     /*  a1<- method->insns */
@@ -446,7 +446,7 @@ common_exceptionThrown:
     jalr    t9
     move    a1, s4                      /* a1<- self */
     b       common_gotoBail             /* bail out */
-    li      a1, 0                       /* "want switch" = false */
+    move    a1, zero                    /* "want switch" = false */
 
 /*
  * After returning from a "glued" function, pull out the updated
@@ -467,7 +467,7 @@ common_errArrayIndex:
     la      a0, .strArrayIndexException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -480,7 +480,7 @@ common_errArrayStore:
     la      a0, .strArrayStoreException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -493,7 +493,7 @@ common_errDivideByZero:
     la      a0, .strArithmeticException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -506,7 +506,7 @@ common_errNegativeArraySize:
     la      a0, .strNegativeArraySizeException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -519,7 +519,7 @@ common_errNoSuchMethod:
     la      a0, .strNoSuchMethodError
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -534,7 +534,7 @@ common_errNullObject:
     la      a0, .strNullPointerException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 

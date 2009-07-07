@@ -1,4 +1,4 @@
-%default {"result":"v0", "chkzero":"0"}
+%default {"preinstr":"", "result":"v0", "chkzero":"0"}
     /*
      * Generic 32-bit "lit16" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = a0 op a1".
@@ -15,10 +15,11 @@
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if $chkzero
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    $preinstr
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     $instr                              /* $result<- op */

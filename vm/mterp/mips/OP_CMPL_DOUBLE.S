@@ -1,4 +1,3 @@
-%default { "naninst":"mvn     r1, #0" }
 %verify "executed"
 %verify "basic lt, gt, eq */
 %verify "left arg NaN"
@@ -15,35 +14,45 @@
      * For: cmpl-double, cmpg-double
      */
     /* op vAA, vBB, vCC */
-    FETCH(r0, 1)                        @ r0<- CCBB
-    and     r9, r0, #255                @ r9<- BB
-    mov     r10, r0, lsr #8             @ r10<- CC
-    add     r9, rFP, r9, lsl #2         @ r9<- &fp[BB]
-    add     r10, rFP, r10, lsl #2       @ r10<- &fp[CC]
-    ldmia   r9, {r0-r1}                 @ r0/r1<- vBB/vBB+1
-    ldmia   r10, {r2-r3}                @ r2/r3<- vCC/vCC+1
-    bl      __aeabi_cdcmple             @ cmp <=: C clear if <, Z set if eq
-    bhi     .L${opcode}_gt_or_nan       @ C set and Z clear, disambiguate
-    mvncc   r1, #0                      @ (less than) r1<- -1
-    moveq   r1, #0                      @ (equal) r1<- 0, trumps less than
-.L${opcode}_finish:
-    mov     r3, rINST, lsr #8           @ r3<- AA
-    FETCH_ADVANCE_INST(2)               @ advance rPC, load rINST
-    SET_VREG(r1, r3)                    @ vAA<- r1
-    GET_INST_OPCODE(ip)                 @ extract opcode from rINST
-    GOTO_OPCODE(ip)                     @ jump to next instruction
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    andi    s4, a0, 255                 /* s4<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __eqdf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    jalr    t9
+    lw      a3, 4(s5)
+    beqz    v0, .L${opcode}_finish	/* Branch if equal */
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __ltdf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    jalr    t9
+    lw      a3, 4(s5)
+    bltz    v0, .L${opcode}_finish	/* Branch if less than */
+    li      v0, -1
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __gtsf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    jalr    t9
+    lw      a3, 4(s5)
+    blez    v0, .L${opcode}_finish	/* Branch if NaN */
+    li      v0, -1			/* NaN return */
+    b       .L${opcode}_finish		/* Branch if greater */
+    li      v0, 1			/* Greater than return */
+
 %break
 
-    @ Test for NaN with a second comparison.  EABI forbids testing bit
-    @ patterns, and we can't represent 0x7fc00000 in immediate form, so
-    @ make the library call.
-.L${opcode}_gt_or_nan:
-    ldmia   r10, {r0-r1}                @ reverse order
-    ldmia   r9, {r2-r3}
-    bl      __aeabi_cdcmple             @ r0<- Z set if eq, C clear if <
-    @bleq    common_abort
-    movcc   r1, #1                      @ (greater than) r1<- 1
-    bcc     .L${opcode}_finish
-    $naninst                            @ r1<- 1 or -1 for NaN
-    b       .L${opcode}_finish
+.L${opcode}_finish:
+    srl     s4, rINST, 8                /* s4<- AA */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
 
