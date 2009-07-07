@@ -843,29 +843,57 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_MONITOR_ENTER: /* 0x1d */
-    /* stub for OP_MONITOR_ENTER */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_MONITOR_ENTER  /* call */
+/* File: mips/OP_MONITOR_ENTER.S */
+    /*
+     * Synchronize on an object.
+     */
+    /* monitor-enter vAA */
+    srl     a2, rINST, 8              /* a2<- AA */
+    GET_VREG(a1, a2)                  /* a1<- vAA (object) */
+    lw      a0, offGlue_self(rGLUE)   /* a0<- glue->self */
+#ifdef WITH_MONITOR_TRACKING
+    EXPORT_PC()                       /* export PC so we can grab stack trace */
+#endif
+    beqz    a1, common_errNullObject  /* null object, throw an exception */
+    LA(t9,dvmLockObject)              /* call(self, obj) */
+    FETCH_ADVANCE_INST(1)             /* advance rPC, load rINST */
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    nop
+#ifdef WITH_DEADLOCK_PREDICTION /* implies WITH_MONITOR_TRACKING */
+    lw      a0, offGlue_self(rGLUE)     /* a0<- glue->self */
+    lw      a1, offThread_exception(a0) /* check for exception */
+    bnez    a1, common_exceptionThrown  /* exception raised, bail out */
+    nop
+#endif
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_MONITOR_EXIT: /* 0x1e */
-    /* stub for OP_MONITOR_EXIT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_MONITOR_EXIT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_MONITOR_EXIT.S */
+    /*
+     * Unlock an object.
+     *
+     * Exceptions that occur when unlocking a monitor need to appear as
+     * if they happened at the following instruction.  See the Dalvik
+     * instruction spec.
+     */
+    /* monitor-exit vAA */
+    srl     a2, rINST, 8                /* a2<- AA */
+    EXPORT_PC()                         /* before fetch: export the PC */
+    GET_VREG(a1, a2)                    /* a1<- vAA (object) */
+    beqz    a1, common_errNullObject    /* error if null object */
+    LA(t9,dvmUnlockObject)
+    jalr    t9                          /* v0<- success for unlock(self, obj) */
+    lw      a0, offGlue_self(rGLUE)     /* a0<- glue->self */
+    FETCH_ADVANCE_INST(1)            /* before throw: advance rPC, load rINST */
+    beqz    v0, common_exceptionThrown  /* if failed, exception is pending */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_CHECK_CAST: /* 0x1f */
@@ -961,55 +989,140 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_NEW_INSTANCE: /* 0x22 */
-    /* stub for OP_NEW_INSTANCE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_NEW_INSTANCE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_NEW_INSTANCE.S */
+    /*
+     * Create a new instance of a class.
+     */
+    /* new-instance vAA, class@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResClasses(a3)    /* a3<- pDvmDex->pResClasses */
+    sll     t4, a1, 2
+    addu    a3, a3, t4
+    lw      v0, 0(a3)                   /* v0<- resolved class */
+    EXPORT_PC()                         /* req'd for init, resolve, alloc */
+    beqz    v0, .LOP_NEW_INSTANCE_resolve     /* resolved? no, resolve it now */
+    nop
+
+.LOP_NEW_INSTANCE_resolved:   /* v0=class */
+    lbu     a1, offClassObject_status(v0)  /* a1<- ClassStatus enum */
+    li      t4, CLASS_INITIALIZED          /* has class been initialized? */
+    bne     a1, t4, .LOP_NEW_INSTANCE_needinit   /* no, init class now */
+    nop
+.LOP_NEW_INSTANCE_initialized: /* v0=class */
+    lw      a3, offClassObject_accessFlags(v0)   /* a3<- clazz->accessFlags */
+    andi    t4, a3, (ACC_INTERFACE|ACC_ABSTRACT) /* abstract or interface? */
+    beqz    t4, .LOP_NEW_INSTANCE_finish      /* concrete class, continue */
+    li      a1, ALLOC_DONT_TRACK        /* flags for alloc call */
+    b       .LOP_NEW_INSTANCE_abstract        /* fail */
+    nop
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_NEW_ARRAY: /* 0x23 */
-    /* stub for OP_NEW_ARRAY */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_NEW_ARRAY  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_NEW_ARRAY.S */
+    /*
+     * Allocate an array of objects, specified with the array class
+     * and a count.
+     *
+     * The verifier guarantees that this is an array class, so we don't
+     * check for it here.
+     */
+    /* new-array vA, vB, class@CCCC */
+    srl     a0, rINST, 12               /* a0<- B */
+    FETCH(a2, 1)                        /* a2<- CCCC */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    GET_VREG(a1, a0)                    /* a1<- vB (array length) */
+    lw      a3, offDvmDex_pResClasses(a3)    /* a3<- pDvmDex->pResClasses */
+    sll     t4, a2, 2
+    addu    t4, t4, a3
+    bltz    a1, common_errNegativeArraySize /* negative length, bail */
+    lw      a0, 0(t4)                  /* a0<- resolved class */
+    EXPORT_PC()                        /* req'd for resolve, alloc */
+    beqz    a0, .LOP_NEW_ARRAY_resolve    /* if not resolved, do it */
+
+    /*
+     * Finish allocation.
+     *
+     *  a0 holds class
+     *  a1 holds array length
+     */
+.LOP_NEW_ARRAY_finish:
+    LA(t9,dvmAllocArrayByClass)
+    jalr    t9                          /* v0<- call(clazz, length, flags) */
+    li      a2, ALLOC_DONT_TRACK        /* don't track in local refs table */
+    beqz    v0, common_exceptionThrown  /* yes, handle the exception */
+    srl     a2, rINST, 8                /* a2<- A+ */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    andi    a2, a2, 15                  /* a2<- A */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, a2)                    /* vA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_FILLED_NEW_ARRAY: /* 0x24 */
-    /* stub for OP_FILLED_NEW_ARRAY */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_FILLED_NEW_ARRAY  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_FILLED_NEW_ARRAY.S */
+    /*
+     * Create a new array with elements filled from registers.
+     *
+     * for: filled-new-array, filled-new-array/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, type@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResClasses(a3)    /* a3<- pDvmDex->pResClasses */
+    EXPORT_PC()                         /* need for resolve and alloc */
+    sll     t4, a1, 2
+    addu    t4, t4, a3
+    lw      v0, 0(a3)                   /* v0<- resolved class */
+    srl     s4, rINST, 8                /* s4<- AA or BA */
+    bnez    v0, .LOP_FILLED_NEW_ARRAY_continue    /* if resolved, continue on */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    move    a2, zero                    /* a2<- false */
+    LA(t9,dvmResolveClass)
+    jalr    t9                          /* v0<- call(clazz, ref) */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    beqz    v0, common_exceptionThrown  /* if null, handle exception */
+    nop
+    b       .LOP_FILLED_NEW_ARRAY_continue
+    nop
+
 /* ------------------------------ */
     .balign 128
 .L_OP_FILLED_NEW_ARRAY_RANGE: /* 0x25 */
-    /* stub for OP_FILLED_NEW_ARRAY_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_FILLED_NEW_ARRAY_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_FILLED_NEW_ARRAY_RANGE.S */
+/* File: mips/OP_FILLED_NEW_ARRAY.S */
+    /*
+     * Create a new array with elements filled from registers.
+     *
+     * for: filled-new-array, filled-new-array/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, type@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResClasses(a3)    /* a3<- pDvmDex->pResClasses */
+    EXPORT_PC()                         /* need for resolve and alloc */
+    sll     t4, a1, 2
+    addu    t4, t4, a3
+    lw      v0, 0(a3)                   /* v0<- resolved class */
+    srl     s4, rINST, 8                /* s4<- AA or BA */
+    bnez    v0, .LOP_FILLED_NEW_ARRAY_RANGE_continue    /* if resolved, continue on */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    move    a2, zero                    /* a2<- false */
+    LA(t9,dvmResolveClass)
+    jalr    t9                          /* v0<- call(clazz, ref) */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    beqz    v0, common_exceptionThrown  /* if null, handle exception */
+    nop
+    b       .LOP_FILLED_NEW_ARRAY_RANGE_continue
+    nop
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_FILL_ARRAY_DATA: /* 0x26 */
@@ -1119,29 +1232,69 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_PACKED_SWITCH: /* 0x2b */
-    /* stub for OP_PACKED_SWITCH */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_PACKED_SWITCH  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_PACKED_SWITCH.S */
+    /*
+     * Handle a packed-switch or sparse-switch instruction.  In both cases
+     * we decode it and hand it off to a helper function.
+     *
+     * We don't really expect backward branches in a switch statement, but
+     * they're perfectly legal, so we check for them here.
+     *
+     * for: packed-switch, sparse-switch
+     */
+    /* op vAA, +BBBB */
+    FETCH(a0, 1)                        /* a0<- bbbb (lo) */
+    FETCH(a1, 2)                        /* a1<- BBBB (hi) */
+    srl     a3, rINST, 8                /* a3<- AA */
+    sll     a1, a1, 16
+    or      a0, a0, a1                  /* a0<- BBBBbbbb */
+    GET_VREG(a1, a3)                    /* a1<- vAA */
+    sll     a0, a0, 1
+    LA(t9,dvmInterpHandlePackedSwitch)
+    jalr    t9                          /* a0<- code-unit branch offset */
+    addu    a0, rPC, a0                 /* a0<- PC + BBBBbbbb*2 */
+    sll     s4, v0, 1                  /* s4<- branch byte offset, check sign */
+    blez    s4, common_backwardBranch  /* backward branch, do periodic checks */
+    nop
+    FETCH_ADVANCE_INST_RB(s4)           /* update rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SPARSE_SWITCH: /* 0x2c */
-    /* stub for OP_SPARSE_SWITCH */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_SPARSE_SWITCH  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_SPARSE_SWITCH.S */
+/* File: mips/OP_PACKED_SWITCH.S */
+    /*
+     * Handle a packed-switch or sparse-switch instruction.  In both cases
+     * we decode it and hand it off to a helper function.
+     *
+     * We don't really expect backward branches in a switch statement, but
+     * they're perfectly legal, so we check for them here.
+     *
+     * for: packed-switch, sparse-switch
+     */
+    /* op vAA, +BBBB */
+    FETCH(a0, 1)                        /* a0<- bbbb (lo) */
+    FETCH(a1, 2)                        /* a1<- BBBB (hi) */
+    srl     a3, rINST, 8                /* a3<- AA */
+    sll     a1, a1, 16
+    or      a0, a0, a1                  /* a0<- BBBBbbbb */
+    GET_VREG(a1, a3)                    /* a1<- vAA */
+    sll     a0, a0, 1
+    LA(t9,dvmInterpHandleSparseSwitch)
+    jalr    t9                          /* a0<- code-unit branch offset */
+    addu    a0, rPC, a0                 /* a0<- PC + BBBBbbbb*2 */
+    sll     s4, v0, 1                  /* s4<- branch byte offset, check sign */
+    blez    s4, common_backwardBranch  /* backward branch, do periodic checks */
+    nop
+    FETCH_ADVANCE_INST_RB(s4)           /* update rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_CMPL_FLOAT: /* 0x2d */
@@ -1241,29 +1394,97 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_CMPL_DOUBLE: /* 0x2f */
-    /* stub for OP_CMPL_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_CMPL_DOUBLE  /* call */
+/* File: mips/OP_CMPL_DOUBLE.S */
+    /*
+     * Compare two floating-point values.  Puts 0, 1, or -1 into the
+     * destination register based on the results of the comparison.
+     *
+     * Provide a "naninst" instruction that puts 1 or -1 into r1 depending
+     * on what value we'd like to return when one of the operands is NaN.
+     *
+     * See OP_CMPL_FLOAT for an explanation.
+     *
+     * For: cmpl-double, cmpg-double
+     */
+    /* op vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    andi    s4, a0, 255                 /* s4<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __eqdf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    lw      a3, 4(s5)
+    beqz    v0, .LOP_CMPL_DOUBLE_finish	/* Branch if equal */
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __ltdf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    jalr    t9
+    lw      a3, 4(s5)
+    bltz    v0, .LOP_CMPL_DOUBLE_finish	/* Branch if less than */
+    li      v0, -1
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __gtsf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    jalr    t9
+    lw      a3, 4(s5)
+    blez    v0, .LOP_CMPL_DOUBLE_finish	/* Branch if NaN */
+    li      v0, -1			/* NaN return */
+    b       .LOP_CMPL_DOUBLE_finish		/* Branch if greater */
+    li      v0, 1			/* Greater than return */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_CMPG_DOUBLE: /* 0x30 */
-    /* stub for OP_CMPG_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_CMPG_DOUBLE  /* call */
+/* File: mips/OP_CMPG_DOUBLE.S */
+    /*
+     * Compare two floating-point values.  Puts 0, 1, or -1 into the
+     * destination register based on the results of the comparison.
+     *
+     * Provide a "naninst" instruction that puts 1 or -1 into r1 depending
+     * on what value we'd like to return when one of the operands is NaN.
+     *
+     * See OP_CMPL_FLOAT for an explanation.
+     *
+     * For: cmpl-double, cmpg-double
+     */
+    /* op vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    andi    s4, a0, 255                 /* s4<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __eqdf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    lw      a3, 4(s5)
+    beqz    v0, .LOP_CMPG_DOUBLE_finish	/* Branch if equal */
+    lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s4)
+    LA(t9, __ltdf2)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    jalr    t9
+    lw      a3, 4(s5)
+
+    slt     t5, v0, 0
+    li      v0, -1			/* Value is less-than */
+    li      v1, 1			/* Value is greater-than or NaN */
+    b       .LOP_CMPG_DOUBLE_finish
+    movz    v0, v1, t5
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_CMP_LONG: /* 0x31 */
@@ -3530,29 +3751,54 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INT_TO_FLOAT: /* 0x82 */
-    /* stub for OP_INT_TO_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INT_TO_FLOAT  /* call */
+/* File: mips/OP_INT_TO_FLOAT.S */
+    /*
+     * Generic 32-bit unary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = op r0".
+     * This could be an ARM instruction or a function call.
+     *
+     * for: neg-int, not-int, neg-float, int-to-float, float-to-int,
+     *      int-to-byte, int-to-char, int-to-short
+     */
+    /* unop vA, vB */
+    srl     a3, rINST, 12               /* a3<- B */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    GET_VREG(a0, a3)                    /* a0<- vB */
+    LA(t9, __floatsisf)
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    andi    s4, s4, 15
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INT_TO_DOUBLE: /* 0x83 */
-    /* stub for OP_INT_TO_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INT_TO_DOUBLE  /* call */
+/* File: mips/OP_INT_TO_DOUBLE.S */
+    /*
+     * Generic 32bit-to-64bit unary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "v1 = op a0", where
+     * "result" is a 64-bit quantity in v0/v1.
+     *
+     * For: int-to-long, int-to-double, float-to-long, float-to-double
+     */
+    /* unop vA, vB */
+    srl     s4, rINST, 8                /* r9<- A+ */
+    srl     s5, rINST, 12               /* r3<- B */
+    andi    s4, s4, 15
+    GET_VREG(a0, s5)                    /* r0<- vB */
+    LA(t9, __floatsidf)
+    sll     s4, s4, 2
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    addu    s4, rFP, s4                 /* r9<- &fp[A] */
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vA/vA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /*  jump to next instruction */
+    sw      v1, 4(s4)
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_LONG_TO_INT: /* 0x84 */
@@ -3575,55 +3821,141 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_LONG_TO_FLOAT: /* 0x85 */
-    /* stub for OP_LONG_TO_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_LONG_TO_FLOAT  /* call */
+/* File: mips/OP_LONG_TO_FLOAT.S */
+    /* unop vA, vB */
+    srl     a3, rINST, 12               /* a3<- B */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    sll     a3, a3, 2
+    addu    a3, rFP, a3                 /* a3<- &fp[B] */
+    andi    s4, s4, 15
+    LA(t9, __floatdisf)
+    lw      a0, 0(a3)                   /* a0/a1<- vB/vB+1 */
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    lw      a1, 4(a3)
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)                    /* vA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_LONG_TO_DOUBLE: /* 0x86 */
-    /* stub for OP_LONG_TO_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_LONG_TO_DOUBLE  /* call */
+/* File: mips/OP_LONG_TO_DOUBLE.S */
+    /*
+     * Generic 64-bit unary operation.
+     *
+     * For: neg-long, not-long, neg-double, long-to-double, double-to-long
+     */
+    /* unop vA, vB */
+    srl     s4, rINST, 8                /* r9<- A+ */
+    srl     s5, rINST, 12               /* r3<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    LA(t9, __floatdidf)
+    lw      a0, 0(s5)                   /* a0/a1<- vBB */
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    lw      a1, 4(s5)
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vAA<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_FLOAT_TO_INT: /* 0x87 */
-    /* stub for OP_FLOAT_TO_INT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_FLOAT_TO_INT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_FLOAT_TO_INT.S */
+
+    /* unop vA, vB */
+    srl     a3, rINST, 12               /* a3<- B */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    GET_VREG(s5, a3)                    /* s5<- vB */
+    andi    s4, s4, 15
+    LA(t9, __gesf2)
+    lui     a1, 0x4f00                  /* (float)maxint */
+    jalr    t9                          /* is arg >= maxint? */
+    move    a0, s5
+    lui     v1, 0x7fff
+    bgez    v0, .LOP_FLOAT_TO_INT_finish      /* Brach if yes */
+    ori     v1, v1, 0xffff		/* and return 0x7fffffff */
+
+    LA(t9, __lesf2)
+    lui     a1, 0xcf00                  /* (float)minint */
+    jalr    t9                          /* is arg <= minint? */
+    move    a0, s5
+    blez    v0, .LOP_FLOAT_TO_INT_finish      /* Branch if yes */
+    lui     v1, 0x8000			/* and return 0x80000000 */
+
+    LA(t9, __nesf2)
+    move    a1, s5
+    jalr    t9                          /* Test for NaN */
+    move    a0, s5
+    bnez    v0, .LOP_FLOAT_TO_INT_finish      /* Branch if yes */
+    move    v1, zero  			/* and return 0 */
+
+    /* OK, we can actually convert it now.
+    */
+    LA(t9, __fixsfsi)
+    jalr    t9                          /* Convert float to int */
+    move    a0, s5
+    b       .LOP_FLOAT_TO_INT_finish
+    move    v1, v0
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_FLOAT_TO_LONG: /* 0x88 */
-    /* stub for OP_FLOAT_TO_LONG */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_FLOAT_TO_LONG  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_FLOAT_TO_LONG.S */
+    /*
+     * Generic 32bit-to-64bit unary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "v1 = op a0", where
+     * "result" is a 64-bit quantity in v0/v1.
+     *
+     * For: int-to-long, int-to-double, float-to-long, float-to-double
+     */
+    /* unop vA, vB */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    srl     a3, rINST, 12               /* a3<- B */
+    GET_VREG(s5, a3)                    /* s5<- vB */
+    LA(t9, __gesf2)
+    lui     a1, 0x5f00                  /* (float)maxlong */
+    jalr    t9                          /* is arg >= maxlong? */
+    move    a0, s5
+    lui     v1, 0x7fff
+    ori     v1, v1, 0xffff
+    bgez    v0, .LOP_FLOAT_TO_LONG_finish      /* Brach if yes */
+    li      v0, -1			/* and return 0x7fffffff_ffffffff */
+
+    LA(t9, __lesf2)
+    lui     a1, 0xdf00                  /* (float)minlong */
+    jalr    t9                          /* is arg <= minlong? */
+    move    a0, s5
+    lui     v1, 0x8000
+    blez    v0, .LOP_FLOAT_TO_LONG_finish      /* Brach if yes */
+    move    v0, zero 			/* and return 0x80000000_00000000 */
+
+    LA(t9, __nesf2)
+    move    a1, s5
+    jalr    t9                          /* Test for NaN */
+    move    a0, s5
+    move    v1, zero
+    bnez    v0, .LOP_FLOAT_TO_LONG_finish      /* Branch if yes */
+    move    v0, zero  			/* and return 0 */
+
+    /* OK, we can actually convert it now.
+    */
+    LA(t9, __fixsfdi)
+    jalr    t9                          /* Convert float to double */
+    move    a0, s5
+    b       .LOP_FLOAT_TO_LONG_finish
+    nop
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_FLOAT_TO_DOUBLE: /* 0x89 */
@@ -5868,10 +6200,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 0
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     addu    v0, a0, a1                              /* v0<- op */
@@ -5903,10 +6236,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 0
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     subu     v0, a1, a0                              /* v0<- op */
@@ -5937,10 +6271,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 0
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     mul     v0, a1, a0                              /* v0<- op */
@@ -5971,10 +6306,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 1
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    div    zero, a0, a1
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     mflo    v0                              /* v0<- op */
@@ -6005,10 +6341,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 1
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    div    zero, a0, a1
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     mfhi    v0                              /* v0<- op */
@@ -6039,10 +6376,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 0
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     and     v0, a0, a1                              /* v0<- op */
@@ -6073,10 +6411,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 0
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     or     v0, a0, a1                              /* v0<- op */
@@ -6107,10 +6446,11 @@ store_OP_REM_LONG_2ADDR:
     srl     a2, rINST, 12               /* a2<- B */
     srl     s4, rINST, 8                /* s4<- A+ */
     GET_VREG(a0, a2)                    /* a0<- vB */
-    andi    s4, s4, 15
     .if 0
     beqz    a1, common_errDivideByZero   /* is second operand zero? */
     .endif
+    andi    s4, s4, 15
+    
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
 
     xor     v0, a0, a1                              /* v0<- op */
@@ -6931,9 +7271,280 @@ dvmAsmSisterStart:
     lw      a0, offObject_clazz(a0)     /* a0<- obj->clazz */
 
 
+/* continuation for OP_NEW_INSTANCE */
+
+.LOP_NEW_INSTANCE_finish: /* v0=class */
+    LA(t9,dvmAllocObject)		/* call(clazz, flags) */
+    jalr    t9                          /* v0<- new object */
+    move    a0, v0
+    srl     a3, rINST, 8                /* a3<- AA */
+    beqz    v0, common_exceptionThrown  /* failed? yes, handle the exception */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, a3)                    /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+    /*
+     * Class initialization required.
+     *
+     *  v0 holds class object
+     */
+.LOP_NEW_INSTANCE_needinit:
+    LA(t9,dvmInitClass)
+    move    a0, v0
+    jalr    t9                          /* initialize class */
+    move    s4, v0                      /* save v0 (class) */
+    bnez    v0, .LOP_NEW_INSTANCE_initialized /* success, continue */
+    move    v0, s4                      /* restore v0 */
+    b       common_exceptionThrown      /* failed, deal with init exception */
+    nop
+
+    /*
+     * Resolution required.  This is the least-likely path.
+     *
+     *  a1 holds BBBB
+     */
+.LOP_NEW_INSTANCE_resolve:
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    move    a2, zero                    /* a2<- false */
+    LA(t9,dvmResolveClass)
+    jalr    t9                          /* v0<- resolved ClassObject ptr */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    bnez    v0, .LOP_NEW_INSTANCE_resolved    /* null? no, continue */
+    nop
+    b       common_exceptionThrown      /* yes, handle exception */
+    nop
+
+    /*
+     * We can't instantiate an abstract class or interface, so throw an
+     * InstantiationError with the class descriptor as the message.
+     *
+     *  v0 holds class object
+     */
+.LOP_NEW_INSTANCE_abstract:
+    move    gp, s8
+    la      a0, .strInstantiationError
+    la      t9, dvmThrowExceptionWithClassMessage
+    jalr    t9
+    lw      a1, offClassObject_descriptor(v0)
+    b       common_exceptionThrown
+    nop
+
+
+/* continuation for OP_NEW_ARRAY */
+
+
+    /*
+     * Resolve class.  (This is an uncommon case.)
+     *
+     *  a1 holds array length
+     *  a2 holds class ref CCCC
+     */
+.LOP_NEW_ARRAY_resolve:
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    move    s4, a1                      /* s4<- length (save) */
+    move    a1, a2                      /* a1<- CCCC */
+    move    a2, zero                    /* a2<- false */
+    LA(t9,dvmResolveClass)
+    jalr    t9                          /* v0<- call(clazz, ref) */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    beqz    v0, common_exceptionThrown  /* yes, handle exception */
+    move    a1, s4                      /* a1<- length (restore) */
+    b       .LOP_NEW_ARRAY_finish
+    move    a0, v0
+
+
+/* continuation for OP_FILLED_NEW_ARRAY */
+
+    /*
+     * On entry:
+     *  v0 holds array class
+     *  s4 holds AA or BA
+     */
+.LOP_FILLED_NEW_ARRAY_continue:
+    lw      a3, offClassObject_descriptor(v0) /* a3<- arrayClass->descriptor */
+    li      a2, ALLOC_DONT_TRACK        /* a2<- alloc flags */
+    lbu     a3, 1(a3)                   /* a3<- descriptor[1] */
+    .if     0
+    move    a1, s4                      /* a1<- AA (length) */
+    .else
+    srl     a1, s4, 4                   /* a1<- B (length) */
+    .endif
+    move    s5, a1                      /* save length in s5 */
+    subu    t4, a3, 'I'                 /* array of ints? */
+    beqz    t4, .LOP_FILLED_NEW_ARRAY_impl
+    subu    t4, a3, 'L'                 /* array of objects? */
+    beqz    t4, .LOP_FILLED_NEW_ARRAY_impl
+    subu    t4, a3, '['                 /* array of arrays? */
+    bnez    t4, .LOP_FILLED_NEW_ARRAY_notimpl     /* no, not handled yet */
+.LOP_FILLED_NEW_ARRAY_impl:
+    LA(t9,dvmAllocArrayByClass)
+    jalr    t9                          /* v0<- call(arClass, length, flags) */
+    beqz    v0, common_exceptionThrown  /* alloc failed, handle exception */
+
+    FETCH(a1, 2)                        /* a1<- FEDC or CCCC */
+    sw      v0, offGlue_retval(rGLUE)   /* retval.l <- new array */
+    addu    a0, v0, offArrayObject_contents /* a0<- newArray->contents */
+    subu    s5, s5, 1                   /* length--, check for neg */
+    FETCH_ADVANCE_INST(3)               /* advance to next instr, load rINST */
+    bltz    s5, 2f                      /* length was zero, bail */
+
+    /* copy values from registers into the array
+     * a0=array, a1=CCCC/FEDC, s5=length (from AA or B), s4=AA/BA
+     */
+    .if     0
+    sll     t4, a1, 2
+    add     a2, rFP, t4                 /* a2<- &fp[CCCC] */
+1:  lw      a3, 0(a2)                   /* a3<- *a2 */
+    subu    s5, s5, 1                   /* count-- */
+    sw      a3, 0(a0)                   /* *contents = vX */
+    addi    a2, a2, 4                   /* a2++ */
+    bgez    s5, 1b
+    addi    a0, a0, 4			/* contents++ */
+    /* continue at 2 */
+    .else
+    subu    t4, s5, 4                   /* length was initially 5? */
+    andi    a2, s4, 15                  /* a2<- A */
+    bnez    t4, 1f                      /* <= 4 args, branch */
+    GET_VREG(a3, a2)                    /* a3<- vA */
+    subu    s5, s5, 1                   /* count-- */
+    sw      a3, 16(a0)                  /* contents[4] = vA */
+1:  andi    a2, a1, 15                  /* a2<- F/E/D/C */
+    GET_VREG(a3, a2)                    /* a3<- vF/vE/vD/vC */
+    srl     a1, a1, 4                   /* a1<- next reg in low 4 */
+    subu    s5, s5, 1                   /* count-- */
+    sw      a3, 0(a0)                   /* *contents = vX */
+    bgez    s5,1b
+    addi    a0, a0, 4			/* contents++ */
+    /* continue at 2 */
+    .endif
+
+2:
+    GET_INST_OPCODE(t7)                 /* t7<- opcode from rINST */
+    GOTO_OPCODE(t7)                     /* execute it */
+
+    /*
+     * Throw an exception indicating that we have not implemented this
+     * mode of filled-new-array.
+     */
+.LOP_FILLED_NEW_ARRAY_notimpl:
+    move    gp, s8
+    la      a0, .strInternalError
+    la      a1, .strFilledNewArrayNotImpl
+    la      t9, dvmThrowException
+    jalr    t9
+    nop
+    b       common_exceptionThrown
+    nop
+
+
+/* continuation for OP_FILLED_NEW_ARRAY_RANGE */
+
+    /*
+     * On entry:
+     *  v0 holds array class
+     *  s4 holds AA or BA
+     */
+.LOP_FILLED_NEW_ARRAY_RANGE_continue:
+    lw      a3, offClassObject_descriptor(v0) /* a3<- arrayClass->descriptor */
+    li      a2, ALLOC_DONT_TRACK        /* a2<- alloc flags */
+    lbu     a3, 1(a3)                   /* a3<- descriptor[1] */
+    .if     1
+    move    a1, s4                      /* a1<- AA (length) */
+    .else
+    srl     a1, s4, 4                   /* a1<- B (length) */
+    .endif
+    move    s5, a1                      /* save length in s5 */
+    subu    t4, a3, 'I'                 /* array of ints? */
+    beqz    t4, .LOP_FILLED_NEW_ARRAY_RANGE_impl
+    subu    t4, a3, 'L'                 /* array of objects? */
+    beqz    t4, .LOP_FILLED_NEW_ARRAY_RANGE_impl
+    subu    t4, a3, '['                 /* array of arrays? */
+    bnez    t4, .LOP_FILLED_NEW_ARRAY_RANGE_notimpl     /* no, not handled yet */
+.LOP_FILLED_NEW_ARRAY_RANGE_impl:
+    LA(t9,dvmAllocArrayByClass)
+    jalr    t9                          /* v0<- call(arClass, length, flags) */
+    beqz    v0, common_exceptionThrown  /* alloc failed, handle exception */
+
+    FETCH(a1, 2)                        /* a1<- FEDC or CCCC */
+    sw      v0, offGlue_retval(rGLUE)   /* retval.l <- new array */
+    addu    a0, v0, offArrayObject_contents /* a0<- newArray->contents */
+    subu    s5, s5, 1                   /* length--, check for neg */
+    FETCH_ADVANCE_INST(3)               /* advance to next instr, load rINST */
+    bltz    s5, 2f                      /* length was zero, bail */
+
+    /* copy values from registers into the array
+     * a0=array, a1=CCCC/FEDC, s5=length (from AA or B), s4=AA/BA
+     */
+    .if     1
+    sll     t4, a1, 2
+    add     a2, rFP, t4                 /* a2<- &fp[CCCC] */
+1:  lw      a3, 0(a2)                   /* a3<- *a2 */
+    subu    s5, s5, 1                   /* count-- */
+    sw      a3, 0(a0)                   /* *contents = vX */
+    addi    a2, a2, 4                   /* a2++ */
+    bgez    s5, 1b
+    addi    a0, a0, 4			/* contents++ */
+    /* continue at 2 */
+    .else
+    subu    t4, s5, 4                   /* length was initially 5? */
+    andi    a2, s4, 15                  /* a2<- A */
+    bnez    t4, 1f                      /* <= 4 args, branch */
+    GET_VREG(a3, a2)                    /* a3<- vA */
+    subu    s5, s5, 1                   /* count-- */
+    sw      a3, 16(a0)                  /* contents[4] = vA */
+1:  andi    a2, a1, 15                  /* a2<- F/E/D/C */
+    GET_VREG(a3, a2)                    /* a3<- vF/vE/vD/vC */
+    srl     a1, a1, 4                   /* a1<- next reg in low 4 */
+    subu    s5, s5, 1                   /* count-- */
+    sw      a3, 0(a0)                   /* *contents = vX */
+    bgez    s5,1b
+    addi    a0, a0, 4			/* contents++ */
+    /* continue at 2 */
+    .endif
+
+2:
+    GET_INST_OPCODE(t7)                 /* t7<- opcode from rINST */
+    GOTO_OPCODE(t7)                     /* execute it */
+
+    /*
+     * Throw an exception indicating that we have not implemented this
+     * mode of filled-new-array.
+     */
+.LOP_FILLED_NEW_ARRAY_RANGE_notimpl:
+    move    gp, s8
+    la      a0, .strInternalError
+    la      a1, .strFilledNewArrayNotImpl
+    la      t9, dvmThrowException
+    jalr    t9
+    nop
+    b       common_exceptionThrown
+    nop
+
+
 /* continuation for OP_CMPL_FLOAT */
 
 .LOP_CMPL_FLOAT_finish:
+    srl     s4, rINST, 8                /* s4<- AA */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+/* continuation for OP_CMPL_DOUBLE */
+
+.LOP_CMPL_DOUBLE_finish:
+    srl     s4, rINST, 8                /* s4<- AA */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+/* continuation for OP_CMPG_DOUBLE */
+
+.LOP_CMPG_DOUBLE_finish:
     srl     s4, rINST, 8                /* s4<- AA */
     FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
     SET_VREG(v0, s4)                    /* vAA<- v0 */
@@ -7239,11 +7850,33 @@ dvmAsmSisterStart:
 .LOP_SGET_WIDE_resolve:
 
 
+/* continuation for OP_FLOAT_TO_INT */
+
+.LOP_FLOAT_TO_INT_finish:
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v1, s4)                    /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+/* continuation for OP_FLOAT_TO_LONG */
+
+.LOP_FLOAT_TO_LONG_finish:
+    andi    s4, s4, 15
+    sll     s4, s4, 2
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vA/vA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /*  jump to next instruction */
+    sw      v1, 4(s4)
+
+
 /* continuation for OP_DIV_LONG */
 
 testneg_OP_DIV_LONG:
     bne     a1, t4, divit_OP_DIV_LONG
-    li      t5, 0xffff
+    li      t5, -1
     bne     a2, t5, divit_OP_DIV_LONG
     nop
     bne     a3, t5, divit_OP_DIV_LONG
@@ -7255,7 +7888,7 @@ testneg_OP_DIV_LONG:
 
 testneg_OP_REM_LONG:
     bne     a1, t4, divit_OP_REM_LONG
-    li      t5, 0xffff
+    li      t5, -1
     bne     a2, t5, divit_OP_REM_LONG
     nop
     bne     a3, t5, divit_OP_REM_LONG
@@ -7267,7 +7900,7 @@ testneg_OP_REM_LONG:
 
 testneg_OP_DIV_LONG_2ADDR:
     bne     a1, t4, divit_OP_DIV_LONG_2ADDR
-    li      t5, 0xffff
+    li      t5, -1
     bne     a2, t5, divit_OP_DIV_LONG_2ADDR
     nop
     bne     a3, t5, divit_OP_DIV_LONG_2ADDR
@@ -7279,7 +7912,7 @@ testneg_OP_DIV_LONG_2ADDR:
 
 testneg_OP_REM_LONG_2ADDR:
     bne     a1, t4, divit_OP_REM_LONG_2ADDR
-    li      t5, 0xffff
+    li      t5, -1
     bne     a2, t5, divit_OP_REM_LONG_2ADDR
     nop
     bne     a3, t5, divit_OP_REM_LONG_2ADDR
@@ -7604,14 +8237,14 @@ common_returnFromMethod:
 .LreturnNew:
     li      a0, kInterpEntryReturn
     bal     common_periodicChecks
-    li      s4, 0
+    move    s4, zero
 
     SAVEAREA_FROM_FP(a0, rFP)           /* a0<- saveArea (old) */
     lw      rFP, offStackSaveArea_prevFrame(a0) /* fp = saveArea->prevFrame */
     lw      a2, (offStackSaveArea_method - sizeofStackSaveArea)(rFP)
                                         /* a2<- method we're returning to */
     beqz    a2, common_gotoBail         /* break frame, bail out completely */
-    li      a1, 0                       /* "want switch" = false */
+    move    a1, zero                    /* "want switch" = false */
 
     lw      rPC, offStackSaveArea_savedPc(a0) /* pc = saveArea->savedPc */
     lw      a3, offGlue_self(rGLUE)      /* a3<- glue->self */
@@ -7637,7 +8270,7 @@ common_exceptionThrown:
 .LexceptionNew:
     li      a0, kInterpEntryThrow
     bal     common_periodicChecks
-    li      s4, 0
+    move    s4, zero
 
     lw      s4, offGlue_self(rGLUE)     /* s4<- glue->self */
     lw      s5, offThread_exception(s4) /* s5<- self->exception */
@@ -7649,7 +8282,7 @@ common_exceptionThrown:
     move    a0, s5                      /* a0<- exception */
     addiu   sp, sp, 16			/* deallocate call stack */
 
-    li      a3, 0                       /* a3<- NULL */
+    move    a3, zero                    /* a3<- NULL */
     sw      a3, offThread_exception(s4) /* self->exception = NULL */
 
     /* Make the function call
@@ -7662,7 +8295,7 @@ common_exceptionThrown:
     move    v0, sp	    
     addiu   sp, sp, -20			/* &fp, arg3 - arg0 */
     sw	    v0, 16(sp)			/* &fp */
-    li      a3, 0                       /*  a3<- false */
+    move    a3, zero                    /*  a3<- false */
     lw      a1, offGlue_method(rGLUE)   /*  a1<- glue->method */
     move    a0, s4                      /*  a0<- self */
     lw      a1, offMethod_insns(a1)     /*  a1<- method->insns */
@@ -7740,7 +8373,7 @@ common_exceptionThrown:
     jalr    t9
     move    a1, s4                      /* a1<- self */
     b       common_gotoBail             /* bail out */
-    li      a1, 0                       /* "want switch" = false */
+    move    a1, zero                    /* "want switch" = false */
 
 /*
  * After returning from a "glued" function, pull out the updated
@@ -7761,7 +8394,7 @@ common_errArrayIndex:
     la      a0, .strArrayIndexException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -7774,7 +8407,7 @@ common_errArrayStore:
     la      a0, .strArrayStoreException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -7787,7 +8420,7 @@ common_errDivideByZero:
     la      a0, .strArithmeticException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -7800,7 +8433,7 @@ common_errNegativeArraySize:
     la      a0, .strNegativeArraySizeException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -7813,7 +8446,7 @@ common_errNoSuchMethod:
     la      a0, .strNoSuchMethodError
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 
@@ -7828,7 +8461,7 @@ common_errNullObject:
     la      a0, .strNullPointerException
     la      t9, dvmThrowException
     jalr    t9
-    li      a1, 0
+    move    a1, zero
     b       common_exceptionThrown
     nop
 

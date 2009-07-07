@@ -70,26 +70,26 @@ op-start c
     op OP_CONST_STRING mips
     op OP_CONST_STRING_JUMBO mips
     op OP_CONST_CLASS mips
-##    op OP_MONITOR_ENTER mips
-##    op OP_MONITOR_EXIT mips
+    op OP_MONITOR_ENTER mips
+    op OP_MONITOR_EXIT mips
     op OP_CHECK_CAST mips
     op OP_INSTANCE_OF mips
     op OP_ARRAY_LENGTH mips
-#    op OP_NEW_INSTANCE mips
-#    op OP_NEW_ARRAY mips
-#    op OP_FILLED_NEW_ARRAY mips
-#    op OP_FILLED_NEW_ARRAY_RANGE mips
+    op OP_NEW_INSTANCE mips
+    op OP_NEW_ARRAY mips
+    op OP_FILLED_NEW_ARRAY mips
+    op OP_FILLED_NEW_ARRAY_RANGE mips
     op OP_FILL_ARRAY_DATA mips
     op OP_THROW mips
     op OP_GOTO mips
     op OP_GOTO_16 mips
     op OP_GOTO_32 mips
-#    op OP_PACKED_SWITCH mips
-#    op OP_SPARSE_SWITCH mips
+    op OP_PACKED_SWITCH mips
+    op OP_SPARSE_SWITCH mips
     op OP_CMPL_FLOAT mips
     op OP_CMPG_FLOAT mips
-#    op OP_CMPL_DOUBLE mips
-#    op OP_CMPG_DOUBLE mips
+    op OP_CMPL_DOUBLE mips
+    op OP_CMPG_DOUBLE mips
     op OP_CMP_LONG mips
     op OP_IF_EQ mips
     op OP_IF_NE mips
@@ -171,13 +171,13 @@ op-start c
     op OP_NEG_FLOAT mips
     op OP_NEG_DOUBLE mips
     op OP_INT_TO_LONG mips
-#    op OP_INT_TO_FLOAT mips
-#    op OP_INT_TO_DOUBLE mips
+    op OP_INT_TO_FLOAT mips
+    op OP_INT_TO_DOUBLE mips
     op OP_LONG_TO_INT mips
-#    op OP_LONG_TO_FLOAT mips
-#    op OP_LONG_TO_DOUBLE mips
-#    op OP_FLOAT_TO_INT mips
-#    op OP_FLOAT_TO_LONG mips
+    op OP_LONG_TO_FLOAT mips
+    op OP_LONG_TO_DOUBLE mips
+    op OP_FLOAT_TO_INT mips
+    op OP_FLOAT_TO_LONG mips
 #    op OP_FLOAT_TO_DOUBLE mips
 #    op OP_DOUBLE_TO_INT mips
 #    op OP_DOUBLE_TO_LONG mips
