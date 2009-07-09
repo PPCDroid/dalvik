@@ -178,8 +178,8 @@ op-start c
     op OP_LONG_TO_DOUBLE mips
     op OP_FLOAT_TO_INT mips
     op OP_FLOAT_TO_LONG mips
-#    op OP_FLOAT_TO_DOUBLE mips
-#    op OP_DOUBLE_TO_INT mips
+##    op OP_FLOAT_TO_DOUBLE mips
+##    op OP_DOUBLE_TO_INT mips
 #    op OP_DOUBLE_TO_LONG mips
 #    op OP_DOUBLE_TO_FLOAT mips
     op OP_INT_TO_BYTE mips
