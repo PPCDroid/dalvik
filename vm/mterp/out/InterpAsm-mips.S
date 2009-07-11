@@ -1431,7 +1431,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     li      v0, -1
     lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
     lw      a1, 4(s4)
-    LA(t9, __gtsf2)
+    LA(t9, __gtdf2)
     lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
     jalr    t9
     lw      a3, 4(s5)
@@ -1954,6 +1954,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 2
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -1981,6 +1982,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 3
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2016,6 +2018,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 2
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2047,6 +2050,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 0
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2078,6 +2082,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 0
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2109,6 +2114,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 1
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2140,6 +2146,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 1
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2170,6 +2177,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 2
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2197,6 +2205,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 3
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2267,6 +2276,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 0
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2298,6 +2308,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 0
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2329,6 +2340,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 1
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -2360,6 +2372,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 1
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */
@@ -4086,7 +4099,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     andi    s4, s4, 15
     sll     v0, a0, 16                           /* optional op */
     FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
-    srl     v0, v0, 16                              /* a0<- op, a0-a3 maybe changed */
+    sra     v0, v0, 16                              /* a0<- op, a0-a3 maybe changed */
     GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
     SET_VREG(v0, s4)                    /* vAA<- v0 */
     GOTO_OPCODE(t7)                     /* jump to next instruction */
@@ -4980,24 +4993,24 @@ store_OP_REM_LONG:
      * distance) is 32-bit.  Also, Dalvik requires us to mask off the low
      * 6 bits of the shift distance.
      */
-    /* shl-long vAA, vBB, vCC */
+    /* ushr-long vAA, vBB, vCC */
     FETCH(a0, 1)                       /* a0<- CCBB */
     srl     s4, rINST, 8               /* s4<- AA */
     andi    s5, a0, 255                /* s5<- BB */
     srl     s6, a0, 8                  /* s6<- CC */
     sll     s5, s5, 2
-    add     s5, rFP, s5                 /* s5<- &fp[BB] */
+    addu    s5, rFP, s5                 /* s5<- &fp[BB] */
     GET_VREG(t7, s6)                    /* t7<- vCC */
     lw      a0, 0(s5)                   /* a0/a1<- vBB/vBB+1 */
     lw      a1, 4(s5)
     andi    t0, t7, 63                  /* t0<- t7 & 0x3f */
     sll     s4, s4, 2
-    add     s4, rFP, s4                 /* s4<- &fp[AA] */
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
 
     nor     t2, zero, t0
-    sll     t9, a0, 1
+    sll     t9, a1, 1
     sllv    a2, t9, t2
-    srlv    t6, a1, t0
+    srlv    t6, a0, t0
     andi    t1, t7, 0x20
     srlv    v1, a1, t0
     or      v0, a2, t6
@@ -6033,9 +6046,9 @@ store_OP_REM_LONG_2ADDR:
 
     andi    t0, t7, 63                  /* t0<- t7 & 0x3f */
     nor     t2, zero, t0
-    sll     t9, a0, 1
+    sll     t9, a1, 1
     sllv    a2, t9, t2
-    srlv    t6, a1, t0
+    srlv    t6, a0, t0
     andi    t1, t7, 0x20
     srlv    v1, a1, t0
     or      v0, a2, t6

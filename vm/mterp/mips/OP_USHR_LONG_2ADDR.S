@@ -24,9 +24,9 @@
 
     andi    t0, t7, 63                  /* t0<- t7 & 0x3f */
     nor     t2, zero, t0
-    sll     t9, a0, 1
+    sll     t9, a1, 1
     sllv    a2, t9, t2
-    srlv    t6, a1, t0
+    srlv    t6, a0, t0
     andi    t1, t7, 0x20
     srlv    v1, a1, t0
     or      v0, a2, t6

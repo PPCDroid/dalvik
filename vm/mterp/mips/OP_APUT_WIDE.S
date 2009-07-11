@@ -12,6 +12,7 @@
     beqz    a0, common_errNullObject    /* if null array object, bail */
     lw      a3, offArrayObject_length(a0)    /* a3<- arrayObj->length */
     sll     t6, a1, 3
+    bltz    a1, common_errArrayIndex    /* index < zero, bail */
     addu    a0, a0, t6                  /* a0<- arrayObj + index*width */
     subu    t5, a1, a3                  /* compare unsigned index, length */
     bgez    t5, common_errArrayIndex    /* index >= length, bail */

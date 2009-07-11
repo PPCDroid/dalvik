@@ -38,7 +38,7 @@
     li      v0, -1
     lw      a0, 0(s4)                   /* a0/a1<- vBB/vBB+1 */
     lw      a1, 4(s4)
-    LA(t9, __gtsf2)
+    LA(t9, __gtdf2)
     lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
     jalr    t9
     lw      a3, 4(s5)
