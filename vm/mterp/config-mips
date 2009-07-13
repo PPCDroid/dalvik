@@ -151,13 +151,13 @@ op-start c
     op OP_SPUT_BYTE mips
     op OP_SPUT_CHAR mips
     op OP_SPUT_SHORT mips
-    op OP_INVOKE_VIRTUAL mips
+####    op OP_INVOKE_VIRTUAL mips
 #    op OP_INVOKE_SUPER mips
 #    op OP_INVOKE_DIRECT mips
 #    op OP_INVOKE_STATIC mips
 #    op OP_INVOKE_INTERFACE mips
     op OP_UNUSED_73 mips
-    op OP_INVOKE_VIRTUAL_RANGE mips
+####    op OP_INVOKE_VIRTUAL_RANGE mips
 #    op OP_INVOKE_SUPER_RANGE mips
 #    op OP_INVOKE_DIRECT_RANGE mips
 #    op OP_INVOKE_STATIC_RANGE mips

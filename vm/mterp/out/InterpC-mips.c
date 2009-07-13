@@ -1176,6 +1176,11 @@ GOTO_TARGET_DECL(exceptionThrown);
     FINISH(2);
 
 
+/* File: c/OP_INVOKE_VIRTUAL.c */
+HANDLE_OPCODE(OP_INVOKE_VIRTUAL /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
+    GOTO_invoke(invokeVirtual, false);
+OP_END
+
 /* File: c/OP_INVOKE_SUPER.c */
 HANDLE_OPCODE(OP_INVOKE_SUPER /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
     GOTO_invoke(invokeSuper, false);
@@ -1194,6 +1199,11 @@ OP_END
 /* File: c/OP_INVOKE_INTERFACE.c */
 HANDLE_OPCODE(OP_INVOKE_INTERFACE /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
     GOTO_invoke(invokeInterface, false);
+OP_END
+
+/* File: c/OP_INVOKE_VIRTUAL_RANGE.c */
+HANDLE_OPCODE(OP_INVOKE_VIRTUAL_RANGE /*{vCCCC..v(CCCC+AA-1)}, meth@BBBB*/)
+    GOTO_invoke(invokeVirtual, true);
 OP_END
 
 /* File: c/OP_INVOKE_SUPER_RANGE.c */

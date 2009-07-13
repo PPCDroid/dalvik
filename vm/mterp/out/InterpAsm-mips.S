@@ -3332,51 +3332,16 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_VIRTUAL: /* 0x6e */
-/* File: mips/OP_INVOKE_VIRTUAL.S */
-    /*
-     * Handle a virtual method call.
-     *
-     * for: invoke-virtual, invoke-virtual/range
-     */
-    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
-    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
-    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
-    FETCH(a1, 1)                        /* a1<- BBBB */
-    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
-    FETCH(s5, 2)                        /* s5<- GFED or CCCC */
-    sll     t6, a1, 2
-    addu    t6, t6, a3
-    lw      v0, 0(a3)                   /* v0<- resolved baseMethod */
-    .if     (!0)
-    andi    s5, s5, 15                  /* s5<- D (or stays CCCC) */
-    .endif
-    bnez    v0, .LOP_INVOKE_VIRTUAL_continue    /* if resolved, continue on */
-    EXPORT_PC()                         /* must export for invoke */
-    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
-    li      a2, METHOD_VIRTUAL          /* resolver method type */
-    LA(t9,dvmResolveMethod)
-    jalr    t9                          /* v0<- call(clazz, ref, flags) */
-    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
-    beqz    v0, common_exceptionThrown  /* if null return, handle exception */
-
-    /*
-     * At this point:
-     *  v0 = resolved base method
-     *  s5 = C or CCCC (index of first arg, which is the "this" ptr)
-     */
-.LOP_INVOKE_VIRTUAL_continue:
-    GET_VREG(a1, s5)                        /* a1<- "this" ptr */
-    lhu     a2, offMethod_methodIndex(v0)   /* a2<- baseMethod->methodIndex */
-    beqz    a1, common_errNullObject        /* null "this", throw exception */
-    nop
-    lw      a3, offObject_clazz(a1)         /* a1<- thisPtr->clazz */
-    lw      a3, offClassObject_vtable(a3)   /* a3<- thisPtr->clazz->vtable */
-    sll     t5, a2, 2
-    addu    t5, t5, a3
-    b       common_invokeMethodNoRange    /* continue on */
-    lw      a0, 0(t5)                        /* a0<- vtable[methodIndex] */
-
-
+    /* stub for OP_INVOKE_VIRTUAL */
+    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
+    move    gp, s8
+    la      t9, dvmMterp_OP_INVOKE_VIRTUAL  /* call */
+    jalr    t9
+    move    a0, rGLUE               /* glue is first arg to function */
+    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
+    FETCH_INST()                    /* load next instruction from rPC */
+    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
+    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER: /* 0x6f */
@@ -3442,53 +3407,16 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_VIRTUAL_RANGE: /* 0x74 */
-/* File: mips/OP_INVOKE_VIRTUAL_RANGE.S */
-/* File: mips/OP_INVOKE_VIRTUAL.S */
-    /*
-     * Handle a virtual method call.
-     *
-     * for: invoke-virtual, invoke-virtual/range
-     */
-    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
-    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
-    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
-    FETCH(a1, 1)                        /* a1<- BBBB */
-    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
-    FETCH(s5, 2)                        /* s5<- GFED or CCCC */
-    sll     t6, a1, 2
-    addu    t6, t6, a3
-    lw      v0, 0(a3)                   /* v0<- resolved baseMethod */
-    .if     (!1)
-    andi    s5, s5, 15                  /* s5<- D (or stays CCCC) */
-    .endif
-    bnez    v0, .LOP_INVOKE_VIRTUAL_RANGE_continue    /* if resolved, continue on */
-    EXPORT_PC()                         /* must export for invoke */
-    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
-    li      a2, METHOD_VIRTUAL          /* resolver method type */
-    LA(t9,dvmResolveMethod)
-    jalr    t9                          /* v0<- call(clazz, ref, flags) */
-    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
-    beqz    v0, common_exceptionThrown  /* if null return, handle exception */
-
-    /*
-     * At this point:
-     *  v0 = resolved base method
-     *  s5 = C or CCCC (index of first arg, which is the "this" ptr)
-     */
-.LOP_INVOKE_VIRTUAL_RANGE_continue:
-    GET_VREG(a1, s5)                        /* a1<- "this" ptr */
-    lhu     a2, offMethod_methodIndex(v0)   /* a2<- baseMethod->methodIndex */
-    beqz    a1, common_errNullObject        /* null "this", throw exception */
-    nop
-    lw      a3, offObject_clazz(a1)         /* a1<- thisPtr->clazz */
-    lw      a3, offClassObject_vtable(a3)   /* a3<- thisPtr->clazz->vtable */
-    sll     t5, a2, 2
-    addu    t5, t5, a3
-    b       common_invokeMethodRange    /* continue on */
-    lw      a0, 0(t5)                        /* a0<- vtable[methodIndex] */
-
-
-
+    /* stub for OP_INVOKE_VIRTUAL_RANGE */
+    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
+    move    gp, s8
+    la      t9, dvmMterp_OP_INVOKE_VIRTUAL_RANGE  /* call */
+    jalr    t9
+    move    a0, rGLUE               /* glue is first arg to function */
+    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
+    FETCH_INST()                    /* load next instruction from rPC */
+    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
+    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER_RANGE: /* 0x75 */
