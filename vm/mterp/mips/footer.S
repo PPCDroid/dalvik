@@ -124,11 +124,12 @@ common_invokeMethodRange:
     subu    t7, t7, v0                  /* t7<- "outs" area, for call args */
 1:  lw      a1, 0(a3)                   /* val = *fp */
     addiu   a2, a2, -1                  /* count-- */
-    addiu   a3, a3, 4			/* fp ++ */
+    addiu   a3, a3, 4			/* fp++ */
     sw      a1, 0(t7)                   /* *outs = val */
     bnez    a2, 1b                      /* ...while count != 0 */
     addiu   t7, t7, 4			/* out++ */
     b       .LinvokeArgsDone
+    nop
 
 /*
  * Common code for method invocation without range.
@@ -148,50 +149,49 @@ common_invokeMethodNoRange:
     /* a0=methodToCall, a1=GFED, a2=count, t7=outs
     */
 .LinvokeNonRange:
-    beqz    a2, 0f
-    addiu   v0, a2, -4
-    beqz    v0, 4f
-    addiu   v0, a2, -3
-    beqz    v0, 3f
+    addiu   v0, a2, -1
+    beqz    v0, 1f
     addiu   v0, a2, -2
     beqz    v0, 2f
-    addiu   v0, a2, -1
-    beqz    v0, 1f			/* Fall through to 5. delay slot OK */
+    addiu   v0, a2, -3
+    beqz    v0, 3f
+    addiu   v0, a2, -4
+    beqz    v0, 4f			/* Fall through to 5. delay slot OK */
 
 5:  andi    v0, rINST, 0x0f00		/* isolate A */
     srl     v0, v0, 6			/* a3<- vA (shift right 8, left 2) */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw	    a3, 0(t7)			/* *outs = vA */
-    addiu   t7, t7, -4			/* outs-- */
 
 4:  andi    v0, a1, 0xf000              /*  isolate G */
     srl     v0, v0, 10      		/* a3<- vG (shift right 12, left 2) */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vG */
-    addiu   t7, t7, -4			/* outs-- */
 
 3:  andi    v0, a1, 0x0f00              /*  isolate F */
     srl     v0, v0, 6      		/* a3<- vF */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vF */
-    addiu   t7, t7, -4			/* outs-- */
 
 2:  andi    v0, a1, 0x00f0              /*  isolate E */
     srl     v0, v0, 2      		/* a3<- vE */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vE */
-    addiu   t7, t7, -4			/* outs-- */
 
 1:  andi    v0, a1, 0x000f              /*  isolate D */
     sll     v0, v0, 2      		/* a3<- vD */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vE */
-    addiu   t7, t7, -4			/* outs-- */
 
 0:  /* fall through to .LinvokeArgsDone */
 
@@ -273,11 +273,9 @@ common_invokeMethodNoRange:
 
     /* Call methodToCall->nativeFunc(newFp, &retval)
     */
-    addiu   sp, sp, -16			/* allocate call stack */
-    lw	     t9, offMethod_nativeFunc(a2)
+    lw       t9, offMethod_nativeFunc(a2)
     jalr     t9
     addiu    a1, rGLUE, offGlue_retval  /* a1<- &retval */
-    addiu   sp, sp, 16			/* deallocate call stack */
 
     /* native return; s5=self, s4=newSaveArea
      * equivalent to dvmPopJniLocals
@@ -293,13 +291,11 @@ common_invokeMethodNoRange:
     GOTO_OPCODE(t7)                     /* jump to next instruction */
 
 .LstackOverflow:
-    move    gp, s8
-    addiu   sp, sp, -16			/* allocate call stack */
-    la      t9, dvmHandleStackOverflow
+    LA(t9, dvmHandleStackOverflow)
     jalr    t9
     lw      a0, offGlue_self(rGLUE)     /* r0<- self */
     b       common_exceptionThrown
-    addiu   sp, sp, 16			/* deallocate call stack */
+    nop
 
 /*
  * Common code for handling a return instruction.

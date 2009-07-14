@@ -31,14 +31,14 @@
     /*
      * At this point:
      *  v0 = resolved base method
-     *  s5 = C or CCCC (index of first arg, which is the "this" ptr)
+     *  s5 = D or CCCC (index of first arg, which is the "this" ptr)
      */
 .L${opcode}_continue:
     GET_VREG(a1, s5)                        /* a1<- "this" ptr */
     lhu     a2, offMethod_methodIndex(v0)   /* a2<- baseMethod->methodIndex */
     beqz    a1, common_errNullObject        /* null "this", throw exception */
     nop
-    lw      a3, offObject_clazz(a1)         /* a1<- thisPtr->clazz */
+    lw      a3, offObject_clazz(a1)         /* a3<- thisPtr->clazz */
     lw      a3, offClassObject_vtable(a3)   /* a3<- thisPtr->clazz->vtable */
     sll     t5, a2, 2
     addu    t5, t5, a3

@@ -3332,16 +3332,51 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_VIRTUAL: /* 0x6e */
-    /* stub for OP_INVOKE_VIRTUAL */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_VIRTUAL  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_VIRTUAL.S */
+    /*
+     * Handle a virtual method call.
+     *
+     * for: invoke-virtual, invoke-virtual/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    FETCH(s5, 2)                        /* s5<- GFED or CCCC */
+    sll     t6, a1, 2
+    addu    t6, t6, a3
+    lw      v0, 0(a3)                   /* v0<- resolved baseMethod */
+    .if     (!0)
+    andi    s5, s5, 15                  /* s5<- D (or stays CCCC) */
+    .endif
+    bnez    v0, .LOP_INVOKE_VIRTUAL_continue    /* if resolved, continue on */
+    EXPORT_PC()                         /* must export for invoke */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    li      a2, METHOD_VIRTUAL          /* resolver method type */
+    LA(t9,dvmResolveMethod)
+    jalr    t9                          /* v0<- call(clazz, ref, flags) */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    beqz    v0, common_exceptionThrown  /* if null return, handle exception */
+
+    /*
+     * At this point:
+     *  v0 = resolved base method
+     *  s5 = D or CCCC (index of first arg, which is the "this" ptr)
+     */
+.LOP_INVOKE_VIRTUAL_continue:
+    GET_VREG(a1, s5)                        /* a1<- "this" ptr */
+    lhu     a2, offMethod_methodIndex(v0)   /* a2<- baseMethod->methodIndex */
+    beqz    a1, common_errNullObject        /* null "this", throw exception */
+    nop
+    lw      a3, offObject_clazz(a1)         /* a3<- thisPtr->clazz */
+    lw      a3, offClassObject_vtable(a3)   /* a3<- thisPtr->clazz->vtable */
+    sll     t5, a2, 2
+    addu    t5, t5, a3
+    b       common_invokeMethodNoRange    /* continue on */
+    lw      a0, 0(t5)                        /* a0<- vtable[methodIndex] */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER: /* 0x6f */
@@ -3407,16 +3442,53 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_VIRTUAL_RANGE: /* 0x74 */
-    /* stub for OP_INVOKE_VIRTUAL_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_VIRTUAL_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_VIRTUAL_RANGE.S */
+/* File: mips/OP_INVOKE_VIRTUAL.S */
+    /*
+     * Handle a virtual method call.
+     *
+     * for: invoke-virtual, invoke-virtual/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    FETCH(s5, 2)                        /* s5<- GFED or CCCC */
+    sll     t6, a1, 2
+    addu    t6, t6, a3
+    lw      v0, 0(a3)                   /* v0<- resolved baseMethod */
+    .if     (!1)
+    andi    s5, s5, 15                  /* s5<- D (or stays CCCC) */
+    .endif
+    bnez    v0, .LOP_INVOKE_VIRTUAL_RANGE_continue    /* if resolved, continue on */
+    EXPORT_PC()                         /* must export for invoke */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    li      a2, METHOD_VIRTUAL          /* resolver method type */
+    LA(t9,dvmResolveMethod)
+    jalr    t9                          /* v0<- call(clazz, ref, flags) */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    beqz    v0, common_exceptionThrown  /* if null return, handle exception */
+
+    /*
+     * At this point:
+     *  v0 = resolved base method
+     *  s5 = D or CCCC (index of first arg, which is the "this" ptr)
+     */
+.LOP_INVOKE_VIRTUAL_RANGE_continue:
+    GET_VREG(a1, s5)                        /* a1<- "this" ptr */
+    lhu     a2, offMethod_methodIndex(v0)   /* a2<- baseMethod->methodIndex */
+    beqz    a1, common_errNullObject        /* null "this", throw exception */
+    nop
+    lw      a3, offObject_clazz(a1)         /* a3<- thisPtr->clazz */
+    lw      a3, offClassObject_vtable(a3)   /* a3<- thisPtr->clazz->vtable */
+    sll     t5, a2, 2
+    addu    t5, t5, a3
+    b       common_invokeMethodRange    /* continue on */
+    lw      a0, 0(t5)                        /* a0<- vtable[methodIndex] */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER_RANGE: /* 0x75 */
@@ -7992,11 +8064,12 @@ common_invokeMethodRange:
     subu    t7, t7, v0                  /* t7<- "outs" area, for call args */
 1:  lw      a1, 0(a3)                   /* val = *fp */
     addiu   a2, a2, -1                  /* count-- */
-    addiu   a3, a3, 4			/* fp ++ */
+    addiu   a3, a3, 4			/* fp++ */
     sw      a1, 0(t7)                   /* *outs = val */
     bnez    a2, 1b                      /* ...while count != 0 */
     addiu   t7, t7, 4			/* out++ */
     b       .LinvokeArgsDone
+    nop
 
 /*
  * Common code for method invocation without range.
@@ -8016,50 +8089,49 @@ common_invokeMethodNoRange:
     /* a0=methodToCall, a1=GFED, a2=count, t7=outs
     */
 .LinvokeNonRange:
-    beqz    a2, 0f
-    addiu   v0, a2, -4
-    beqz    v0, 4f
-    addiu   v0, a2, -3
-    beqz    v0, 3f
+    addiu   v0, a2, -1
+    beqz    v0, 1f
     addiu   v0, a2, -2
     beqz    v0, 2f
-    addiu   v0, a2, -1
-    beqz    v0, 1f			/* Fall through to 5. delay slot OK */
+    addiu   v0, a2, -3
+    beqz    v0, 3f
+    addiu   v0, a2, -4
+    beqz    v0, 4f			/* Fall through to 5. delay slot OK */
 
 5:  andi    v0, rINST, 0x0f00		/* isolate A */
     srl     v0, v0, 6			/* a3<- vA (shift right 8, left 2) */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw	    a3, 0(t7)			/* *outs = vA */
-    addiu   t7, t7, -4			/* outs-- */
 
 4:  andi    v0, a1, 0xf000              /*  isolate G */
     srl     v0, v0, 10      		/* a3<- vG (shift right 12, left 2) */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vG */
-    addiu   t7, t7, -4			/* outs-- */
 
 3:  andi    v0, a1, 0x0f00              /*  isolate F */
     srl     v0, v0, 6      		/* a3<- vF */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vF */
-    addiu   t7, t7, -4			/* outs-- */
 
 2:  andi    v0, a1, 0x00f0              /*  isolate E */
     srl     v0, v0, 2      		/* a3<- vE */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vE */
-    addiu   t7, t7, -4			/* outs-- */
 
 1:  andi    v0, a1, 0x000f              /*  isolate D */
     sll     v0, v0, 2      		/* a3<- vD */
     addu    v0, v0, rFP
     lw	    a3, 0(v0)
+    addiu   t7, t7, -4			/* --outs */
     sw      a3, 0(t7)		        /* *outs = vE */
-    addiu   t7, t7, -4			/* outs-- */
 
 0:  /* fall through to .LinvokeArgsDone */
 
@@ -8141,11 +8213,9 @@ common_invokeMethodNoRange:
 
     /* Call methodToCall->nativeFunc(newFp, &retval)
     */
-    addiu   sp, sp, -16			/* allocate call stack */
-    lw	     t9, offMethod_nativeFunc(a2)
+    lw       t9, offMethod_nativeFunc(a2)
     jalr     t9
     addiu    a1, rGLUE, offGlue_retval  /* a1<- &retval */
-    addiu   sp, sp, 16			/* deallocate call stack */
 
     /* native return; s5=self, s4=newSaveArea
      * equivalent to dvmPopJniLocals
@@ -8161,13 +8231,11 @@ common_invokeMethodNoRange:
     GOTO_OPCODE(t7)                     /* jump to next instruction */
 
 .LstackOverflow:
-    move    gp, s8
-    addiu   sp, sp, -16			/* allocate call stack */
-    la      t9, dvmHandleStackOverflow
+    LA(t9, dvmHandleStackOverflow)
     jalr    t9
     lw      a0, offGlue_self(rGLUE)     /* r0<- self */
     b       common_exceptionThrown
-    addiu   sp, sp, 16			/* deallocate call stack */
+    nop
 
 /*
  * Common code for handling a return instruction.
