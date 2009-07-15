@@ -3972,55 +3972,128 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_FLOAT_TO_DOUBLE: /* 0x89 */
-    /* stub for OP_FLOAT_TO_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_FLOAT_TO_DOUBLE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_FLOAT_TO_DOUBLE.S */
+/* File: mips/unopWider.S */
+    /*
+     * Generic 32bit-to-64bit unary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "v1 = op a0", where
+     * "result" is a 64-bit quantity in v0/v1.
+     *
+     * For: int-to-long, int-to-double, float-to-long, float-to-double
+     */
+    /* unop vA, vB */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    srl     s5, rINST, 12               /* a3<- B */
+    andi    s4, s4, 15
+    GET_VREG(a0, s5)                    /* a0<- vB */
+    sll     s4, s4, 2
+    LA(t9, __extendsfdf2)                           /* optional op */
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    jalr      t9                              /* v1<- op */
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vA/vA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /*  jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_DOUBLE_TO_INT: /* 0x8a */
-    /* stub for OP_DOUBLE_TO_INT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
+/* File: mips/OP_DOUBLE_TO_INT.S */
+
+    /* unop vA, vB */
+    srl     a3, rINST, 12               /* a3<- B */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    sll     a3, a3, 2
+    add     a3, rFP, a3                 /* r3<- &fp[B] */
+    lw      s5, 0(a3)                   /* a0/a1<- vB/vB+1 */
+    lw      s6, 4(a3)
+    andi    s4, s4, 15
     move    gp, s8
-    la      t9, dvmMterp_OP_DOUBLE_TO_INT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    la      t9, __gedf2
+    move    a0, s5
+    move    a1, s6
+    la      t1, .LOP_DOUBLE_TO_INT_maxdint     /* (double)maxint */
+    lw      a2, 0(t1)
+    jalr    t9                          /* is arg >= maxint? */
+    lw      a3, 4(t1)
+    lui     v1, 0x7fff
+    bgez    v0, .LOP_DOUBLE_TO_INT_finish      /* Brach if yes */
+    ori     v1, v1, 0xffff		/* and return 0x7fffffff */
+
+    move    a0, s5
+    move    a1, s6
+    LA(t9, __ledf2)
+    lui     a3, 0xc1e0                  /* (double)minint */
+    jalr    t9                          /* is arg <= minint? */
+    move    a2, zero
+    blez    v0, .LOP_DOUBLE_TO_INT_finish      /* Branch if yes */
+    lui     v1, 0x8000			/* and return 0x80000000 */
+    b       .LOP_DOUBLE_TO_INT_nan_and_done
+    move    a0, s5
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_DOUBLE_TO_LONG: /* 0x8b */
-    /* stub for OP_DOUBLE_TO_LONG */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DOUBLE_TO_LONG  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_DOUBLE_TO_LONG.S */
+
+    /* unop vA, vB */
+    srl     a3, rINST, 12               /* a3<- B */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    sll     a3, a3, 2
+    add     a3, rFP, a3                 /* r3<- &fp[B] */
+    lw      s5, 0(a3)                   /* a0/a1<- vB/vB+1 */
+    lw      s6, 4(a3)
+    andi    s4, s4, 15
+    LA(t9, __gedf2)
+    move    a0, s5
+    move    a1, s6
+    lui     a3, 0x43e0
+    jalr    t9                          /* is arg >= maxlong? */
+    move    a2, zero
+    lui     v1, 0x7fff
+    ori     v1, v1, 0xffff
+    bgez    v0, .LOP_DOUBLE_TO_LONG_finish      /* Brach if yes */
+    li      v0, -1			/* and return 0x7fffffff_ffffffff */
+
+    move    a0, s5
+    move    a1, s6
+    LA(t9, __ledf2)
+    lui     a3, 0xc3e0                  /* (double)minlong */
+    jalr    t9                          /* is arg <= minlong? */
+    move    a2, zero
+    lui     v1, 0x8000
+    blez    v0, .LOP_DOUBLE_TO_LONG_finish      /* Brach if yes */
+    move    v0, zero 			/* and return 0x80000000_00000000 */
+    b       .LOP_DOUBLE_TO_LONG_nan_and_done
+    move    a0, s5
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_DOUBLE_TO_FLOAT: /* 0x8c */
-    /* stub for OP_DOUBLE_TO_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DOUBLE_TO_FLOAT  /* call */
+/* File: mips/OP_DOUBLE_TO_FLOAT.S */
+
+    /* unop vA, vB */
+    srl     a3, rINST, 12               /* a3<- B */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    sll     a3, a3, 2
+    add     a3, rFP, a3                 /* r3<- &fp[B] */
+    lw      a0, 0(a3)                   /* a0/a1<- vB/vB+1 */
+    LA(t9, __truncdfsf2)
+    andi    s4, s4, 15
     jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+    lw      a1, 4(a3)
+
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)                    /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INT_TO_BYTE: /* 0x8d */
@@ -5027,133 +5100,428 @@ store_OP_REM_LONG:
 /* ------------------------------ */
     .balign 128
 .L_OP_ADD_FLOAT: /* 0xa6 */
-    /* stub for OP_ADD_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_ADD_FLOAT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_ADD_FLOAT.S */
+/* File: mips/binop.S */
+    /*
+     * Generic 32-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-int, sub-int, mul-int, div-int, rem-int, and-int, or-int,
+     *      xor-int, shl-int, shr-int, ushr-int, add-float, sub-float,
+     *      mul-float, div-float, rem-float
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    srl     a3, a0, 8                   /* a3<- CC */
+    andi    a2, a0, 255                 /* a2<- BB */
+    GET_VREG(a1, a3)                    /* a1<- vCC */
+    GET_VREG(a0, a2)                    /* a0<- vBB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    nop
+    .endif
+
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    LA(t9, __addsf3)                           /* optional op */
+    jalr  t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SUB_FLOAT: /* 0xa7 */
-    /* stub for OP_SUB_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_SUB_FLOAT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_SUB_FLOAT.S */
+/* File: mips/binop.S */
+    /*
+     * Generic 32-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-int, sub-int, mul-int, div-int, rem-int, and-int, or-int,
+     *      xor-int, shl-int, shr-int, ushr-int, add-float, sub-float,
+     *      mul-float, div-float, rem-float
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    srl     a3, a0, 8                   /* a3<- CC */
+    andi    a2, a0, 255                 /* a2<- BB */
+    GET_VREG(a1, a3)                    /* a1<- vCC */
+    GET_VREG(a0, a2)                    /* a0<- vBB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    nop
+    .endif
+
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    LA(t9, __subsf3)                           /* optional op */
+    jalr  t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_MUL_FLOAT: /* 0xa8 */
-    /* stub for OP_MUL_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_MUL_FLOAT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_MUL_FLOAT.S */
+/* File: mips/binop.S */
+    /*
+     * Generic 32-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-int, sub-int, mul-int, div-int, rem-int, and-int, or-int,
+     *      xor-int, shl-int, shr-int, ushr-int, add-float, sub-float,
+     *      mul-float, div-float, rem-float
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    srl     a3, a0, 8                   /* a3<- CC */
+    andi    a2, a0, 255                 /* a2<- BB */
+    GET_VREG(a1, a3)                    /* a1<- vCC */
+    GET_VREG(a0, a2)                    /* a0<- vBB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    nop
+    .endif
+
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    LA(t9, __mulsf3)                           /* optional op */
+    jalr  t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_DIV_FLOAT: /* 0xa9 */
-    /* stub for OP_DIV_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DIV_FLOAT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_DIV_FLOAT.S */
+/* File: mips/binop.S */
+    /*
+     * Generic 32-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-int, sub-int, mul-int, div-int, rem-int, and-int, or-int,
+     *      xor-int, shl-int, shr-int, ushr-int, add-float, sub-float,
+     *      mul-float, div-float, rem-float
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    srl     a3, a0, 8                   /* a3<- CC */
+    andi    a2, a0, 255                 /* a2<- BB */
+    GET_VREG(a1, a3)                    /* a1<- vCC */
+    GET_VREG(a0, a2)                    /* a0<- vBB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    nop
+    .endif
+
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    LA(t9, __divsf3)                           /* optional op */
+    jalr  t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_REM_FLOAT: /* 0xaa */
-    /* stub for OP_REM_FLOAT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_REM_FLOAT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_REM_FLOAT.S */
+/* File: mips/binop.S */
+    /*
+     * Generic 32-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-int, sub-int, mul-int, div-int, rem-int, and-int, or-int,
+     *      xor-int, shl-int, shr-int, ushr-int, add-float, sub-float,
+     *      mul-float, div-float, rem-float
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    srl     a3, a0, 8                   /* a3<- CC */
+    andi    a2, a0, 255                 /* a2<- BB */
+    GET_VREG(a1, a3)                    /* a1<- vCC */
+    GET_VREG(a0, a2)                    /* a0<- vBB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    nop
+    .endif
+
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    LA(t9, fmodf)                           /* optional op */
+    jalr  t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_ADD_DOUBLE: /* 0xab */
-    /* stub for OP_ADD_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_ADD_DOUBLE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_ADD_DOUBLE.S */
+/* File: mips/binopWide.S */
+    /*
+     * Generic 64-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0-a1 op a2-a3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
+     *      xor-long, add-double, sub-double, mul-double, div-double,
+     *      rem-double
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    andi    s6, a0, 255                 /* s6<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
+    sll     s6, s6, 2
+    addu    s6, rFP, s6                 /* s6<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s6)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+
+    LA(t9, __adddf3)                             /* Probably several comma separated */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SUB_DOUBLE: /* 0xac */
-    /* stub for OP_SUB_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_SUB_DOUBLE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_SUB_DOUBLE.S */
+/* File: mips/binopWide.S */
+    /*
+     * Generic 64-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0-a1 op a2-a3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
+     *      xor-long, add-double, sub-double, mul-double, div-double,
+     *      rem-double
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    andi    s6, a0, 255                 /* s6<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
+    sll     s6, s6, 2
+    addu    s6, rFP, s6                 /* s6<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s6)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+
+    LA(t9, __subdf3)                             /* Probably several comma separated */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_MUL_DOUBLE: /* 0xad */
-    /* stub for OP_MUL_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_MUL_DOUBLE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_MUL_DOUBLE.S */
+/* File: mips/binopWide.S */
+    /*
+     * Generic 64-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0-a1 op a2-a3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
+     *      xor-long, add-double, sub-double, mul-double, div-double,
+     *      rem-double
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    andi    s6, a0, 255                 /* s6<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
+    sll     s6, s6, 2
+    addu    s6, rFP, s6                 /* s6<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s6)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+
+    LA(t9, __muldf3)                             /* Probably several comma separated */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_DIV_DOUBLE: /* 0xae */
-    /* stub for OP_DIV_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DIV_DOUBLE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_DIV_DOUBLE.S */
+/* File: mips/binopWide.S */
+    /*
+     * Generic 64-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0-a1 op a2-a3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
+     *      xor-long, add-double, sub-double, mul-double, div-double,
+     *      rem-double
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    andi    s6, a0, 255                 /* s6<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
+    sll     s6, s6, 2
+    addu    s6, rFP, s6                 /* s6<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s6)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+
+    LA(t9, __divdf3)                             /* Probably several comma separated */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_REM_DOUBLE: /* 0xaf */
-    /* stub for OP_REM_DOUBLE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_REM_DOUBLE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_REM_DOUBLE.S */
+/* File: mips/binopWide.S */
+    /*
+     * Generic 64-bit binary operation.  Provide an "instr" line that
+     * specifies an instruction that performs "result = a0-a1 op a2-a3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
+     *      xor-long, add-double, sub-double, mul-double, div-double,
+     *      rem-double
+     */
+    /* binop vAA, vBB, vCC */
+    FETCH(a0, 1)                        /* a0<- CCBB */
+    srl     s4, rINST, 8                /* s4<- AA */
+    andi    s6, a0, 255                 /* s6<- BB */
+    srl     s5, a0, 8                   /* s5<- CC */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[AA] */
+    sll     s6, s6, 2
+    addu    s6, rFP, s6                 /* s6<- &fp[BB] */
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[CC] */
+    lw      a0, 0(s6)                   /* a0/a1<- vBB/vBB+1 */
+    lw      a1, 4(s6)
+    lw      a2, 0(s5)                   /* a2/a3<- vCC/vCC+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+
+    LA(t9, fmod)                             /* Probably several comma separated */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_ADD_INT_2ADDR: /* 0xb0 */
@@ -6065,133 +6433,413 @@ store_OP_REM_LONG_2ADDR:
 /* ------------------------------ */
     .balign 128
 .L_OP_ADD_FLOAT_2ADDR: /* 0xc6 */
-    /* stub for OP_ADD_FLOAT_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_ADD_FLOAT_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_ADD_FLOAT_2ADDR.S */
+/* File: mips/binop2addr.S */
+    /*
+     * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (r1).  Useful for integer division and modulus.
+     *
+     * For: add-int/2addr, sub-int/2addr, mul-int/2addr, div-int/2addr,
+     *      rem-int/2addr, and-int/2addr, or-int/2addr, xor-int/2addr,
+     *      shl-int/2addr, shr-int/2addr, ushr-int/2addr, add-float/2addr,
+     *      sub-float/2addr, mul-float/2addr, div-float/2addr, rem-float/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    srl     s5, rINST, 12               /* s5<- B */
+    andi    s4, s4, 15
+    GET_VREG(a0, s4)                    /* a0<- vA */
+    GET_VREG(a1, s5)                    /* a1<- vB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __addsf3)                           /* optional op */
+    jalr   t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SUB_FLOAT_2ADDR: /* 0xc7 */
-    /* stub for OP_SUB_FLOAT_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_SUB_FLOAT_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_SUB_FLOAT_2ADDR.S */
+/* File: mips/binop2addr.S */
+    /*
+     * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (r1).  Useful for integer division and modulus.
+     *
+     * For: add-int/2addr, sub-int/2addr, mul-int/2addr, div-int/2addr,
+     *      rem-int/2addr, and-int/2addr, or-int/2addr, xor-int/2addr,
+     *      shl-int/2addr, shr-int/2addr, ushr-int/2addr, add-float/2addr,
+     *      sub-float/2addr, mul-float/2addr, div-float/2addr, rem-float/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    srl     s5, rINST, 12               /* s5<- B */
+    andi    s4, s4, 15
+    GET_VREG(a0, s4)                    /* a0<- vA */
+    GET_VREG(a1, s5)                    /* a1<- vB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __subsf3)                           /* optional op */
+    jalr   t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_MUL_FLOAT_2ADDR: /* 0xc8 */
-    /* stub for OP_MUL_FLOAT_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_MUL_FLOAT_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_MUL_FLOAT_2ADDR.S */
+/* File: mips/binop2addr.S */
+    /*
+     * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (r1).  Useful for integer division and modulus.
+     *
+     * For: add-int/2addr, sub-int/2addr, mul-int/2addr, div-int/2addr,
+     *      rem-int/2addr, and-int/2addr, or-int/2addr, xor-int/2addr,
+     *      shl-int/2addr, shr-int/2addr, ushr-int/2addr, add-float/2addr,
+     *      sub-float/2addr, mul-float/2addr, div-float/2addr, rem-float/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    srl     s5, rINST, 12               /* s5<- B */
+    andi    s4, s4, 15
+    GET_VREG(a0, s4)                    /* a0<- vA */
+    GET_VREG(a1, s5)                    /* a1<- vB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __mulsf3)                           /* optional op */
+    jalr   t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_DIV_FLOAT_2ADDR: /* 0xc9 */
-    /* stub for OP_DIV_FLOAT_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DIV_FLOAT_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_DIV_FLOAT_2ADDR.S */
+/* File: mips/binop2addr.S */
+    /*
+     * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (r1).  Useful for integer division and modulus.
+     *
+     * For: add-int/2addr, sub-int/2addr, mul-int/2addr, div-int/2addr,
+     *      rem-int/2addr, and-int/2addr, or-int/2addr, xor-int/2addr,
+     *      shl-int/2addr, shr-int/2addr, ushr-int/2addr, add-float/2addr,
+     *      sub-float/2addr, mul-float/2addr, div-float/2addr, rem-float/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    srl     s5, rINST, 12               /* s5<- B */
+    andi    s4, s4, 15
+    GET_VREG(a0, s4)                    /* a0<- vA */
+    GET_VREG(a1, s5)                    /* a1<- vB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __divsf3)                           /* optional op */
+    jalr   t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_REM_FLOAT_2ADDR: /* 0xca */
-    /* stub for OP_REM_FLOAT_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_REM_FLOAT_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_REM_FLOAT_2ADDR.S */
+/* File: mips/binop2addr.S */
+    /*
+     * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = a0 op a1".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (r1).  Useful for integer division and modulus.
+     *
+     * For: add-int/2addr, sub-int/2addr, mul-int/2addr, div-int/2addr,
+     *      rem-int/2addr, and-int/2addr, or-int/2addr, xor-int/2addr,
+     *      shl-int/2addr, shr-int/2addr, ushr-int/2addr, add-float/2addr,
+     *      sub-float/2addr, mul-float/2addr, div-float/2addr, rem-float/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8                /* s4<- A+ */
+    srl     s5, rINST, 12               /* s5<- B */
+    andi    s4, s4, 15
+    GET_VREG(a0, s4)                    /* a0<- vA */
+    GET_VREG(a1, s5)                    /* a1<- vB */
+    .if 0
+    beqz    a1, common_errDivideByZero  /* is second operand zero? */
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, fmodf)                           /* optional op */
+    jalr   t9; nop                              /* v0<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v0, s4)               /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_ADD_DOUBLE_2ADDR: /* 0xcb */
-    /* stub for OP_ADD_DOUBLE_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_ADD_DOUBLE_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_ADD_DOUBLE_2ADDR.S */
+/* File: mips/binopWide2addr.S */
+    /*
+     * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = r0-r1 op r2-r3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-long/2addr, sub-long/2addr, div-long/2addr, rem-long/2addr,
+     *      and-long/2addr, or-long/2addr, xor-long/2addr, add-double/2addr,
+     *      sub-double/2addr, mul-double/2addr, div-double/2addr,
+     *      rem-double/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8               /* s4<- A+ */
+    srl     s5, rINST, 12              /* s5<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    lw      a0, 0(s4)                   /* a0/a1<- vAA/vAA+1 */
+    lw      a1, 4(s4)
+    lw      a2, 0(s5)                   /* a2/a3<- vBB/vBB+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __adddf3)                             /* optional op */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SUB_DOUBLE_2ADDR: /* 0xcc */
-    /* stub for OP_SUB_DOUBLE_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_SUB_DOUBLE_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_SUB_DOUBLE_2ADDR.S */
+/* File: mips/binopWide2addr.S */
+    /*
+     * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = r0-r1 op r2-r3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-long/2addr, sub-long/2addr, div-long/2addr, rem-long/2addr,
+     *      and-long/2addr, or-long/2addr, xor-long/2addr, add-double/2addr,
+     *      sub-double/2addr, mul-double/2addr, div-double/2addr,
+     *      rem-double/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8               /* s4<- A+ */
+    srl     s5, rINST, 12              /* s5<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    lw      a0, 0(s4)                   /* a0/a1<- vAA/vAA+1 */
+    lw      a1, 4(s4)
+    lw      a2, 0(s5)                   /* a2/a3<- vBB/vBB+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __subdf3)                             /* optional op */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_MUL_DOUBLE_2ADDR: /* 0xcd */
-    /* stub for OP_MUL_DOUBLE_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_MUL_DOUBLE_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_MUL_DOUBLE_2ADDR.S */
+/* File: mips/binopWide2addr.S */
+    /*
+     * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = r0-r1 op r2-r3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-long/2addr, sub-long/2addr, div-long/2addr, rem-long/2addr,
+     *      and-long/2addr, or-long/2addr, xor-long/2addr, add-double/2addr,
+     *      sub-double/2addr, mul-double/2addr, div-double/2addr,
+     *      rem-double/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8               /* s4<- A+ */
+    srl     s5, rINST, 12              /* s5<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    lw      a0, 0(s4)                   /* a0/a1<- vAA/vAA+1 */
+    lw      a1, 4(s4)
+    lw      a2, 0(s5)                   /* a2/a3<- vBB/vBB+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __muldf3)                             /* optional op */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_DIV_DOUBLE_2ADDR: /* 0xce */
-    /* stub for OP_DIV_DOUBLE_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_DIV_DOUBLE_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_DIV_DOUBLE_2ADDR.S */
+/* File: mips/binopWide2addr.S */
+    /*
+     * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = r0-r1 op r2-r3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-long/2addr, sub-long/2addr, div-long/2addr, rem-long/2addr,
+     *      and-long/2addr, or-long/2addr, xor-long/2addr, add-double/2addr,
+     *      sub-double/2addr, mul-double/2addr, div-double/2addr,
+     *      rem-double/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8               /* s4<- A+ */
+    srl     s5, rINST, 12              /* s5<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    lw      a0, 0(s4)                   /* a0/a1<- vAA/vAA+1 */
+    lw      a1, 4(s4)
+    lw      a2, 0(s5)                   /* a2/a3<- vBB/vBB+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, __divdf3)                             /* optional op */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_REM_DOUBLE_2ADDR: /* 0xcf */
-    /* stub for OP_REM_DOUBLE_2ADDR */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_REM_DOUBLE_2ADDR  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_REM_DOUBLE_2ADDR.S */
+/* File: mips/binopWide2addr.S */
+    /*
+     * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
+     * that specifies an instruction that performs "result = r0-r1 op r2-r3".
+     * This could be an instruction or a function call.
+     *
+     * If "chkzero" is set to 1, we perform a divide-by-zero check on
+     * vCC (a1).  Useful for integer division and modulus.
+     *
+     * For: add-long/2addr, sub-long/2addr, div-long/2addr, rem-long/2addr,
+     *      and-long/2addr, or-long/2addr, xor-long/2addr, add-double/2addr,
+     *      sub-double/2addr, mul-double/2addr, div-double/2addr,
+     *      rem-double/2addr
+     */
+    /* binop/2addr vA, vB */
+    srl     s4, rINST, 8               /* s4<- A+ */
+    srl     s5, rINST, 12              /* s5<- B */
+    andi    s4, s4, 15
+    sll     s5, s5, 2
+    addu    s5, rFP, s5                 /* s5<- &fp[B] */
+    sll     s4, s4, 2
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    lw      a0, 0(s4)                   /* a0/a1<- vAA/vAA+1 */
+    lw      a1, 4(s4)
+    lw      a2, 0(s5)                   /* a2/a3<- vBB/vBB+1 */
+    lw      a3, 4(s5)
+    .if 0
+    or      t7, a2, a3                  /* second arg (a2-a3) is zero? */
+    beqz    t7, common_errDivideByZero
+    .endif
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+
+    LA(t9, fmod)                             /* optional op */
+    jalr   t9; nop                             /* result<- op */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)             /* vAA/vAA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      v1, 4(s4)
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_ADD_INT_LIT16: /* 0xd0 */
@@ -7876,6 +8524,65 @@ dvmAsmSisterStart:
 
 .LOP_FLOAT_TO_LONG_finish:
     andi    s4, s4, 15
+    sll     s4, s4, 2
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    addu    s4, rFP, s4                 /* s4<- &fp[A] */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      v0, 0(s4)                   /* vA/vA+1<- v0/v1 */
+    GOTO_OPCODE_SLOT(t7)                /*  jump to next instruction */
+    sw      v1, 4(s4)
+
+
+/* continuation for OP_DOUBLE_TO_INT */
+
+.LOP_DOUBLE_TO_INT_nan_and_done:
+    move    a1, s6
+    LA(t9, __nedf2)
+    move    a2, s5
+    jalr    t9                          /* Test for NaN */
+    move    a3, s6
+    bnez    v0, .LOP_DOUBLE_TO_INT_finish      /* Branch if yes */
+    move    v1, zero  			/* and return 0 */
+
+    /* OK, we can actually convert it now.
+    */
+    LA(t9, __fixdfsi)
+    move    a1, s6
+    jalr    t9                          /* Convert double to int */
+    move    a0, s5
+    move    v1, v0
+
+.LOP_DOUBLE_TO_INT_finish:
+    FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(v1, s4)                    /* vAA<- v0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+.LOP_DOUBLE_TO_INT_maxdint:
+	.word	0xffc00000
+	.word	0x41dfffff
+
+
+/* continuation for OP_DOUBLE_TO_LONG */
+
+.LOP_DOUBLE_TO_LONG_nan_and_done:
+    move    a1, s6
+    LA(t9, __nedf2)
+    move    a2, s5
+    jalr    t9                          /* Test for NaN */
+    move    a3, s6
+    move    v1, zero
+    bnez    v0, .LOP_DOUBLE_TO_LONG_finish      /* Branch if yes */
+    move    v0, zero  			/* and return 0 */
+
+    /* OK, we can actually convert it now.
+    */
+    LA(t9, __fixdfdi)
+    move    a1, s6
+    jalr    t9                          /* Convert double to int */
+    move    a0, s5
+
+.LOP_DOUBLE_TO_LONG_finish:
     sll     s4, s4, 2
     FETCH_ADVANCE_INST(1)               /* advance rPC, load rINST */
     addu    s4, rFP, s4                 /* s4<- &fp[A] */
