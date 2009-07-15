@@ -52,6 +52,7 @@
 .L${opcode}_impl:
     LA(t9,dvmAllocArrayByClass)
     jalr    t9                          /* v0<- call(arClass, length, flags) */
+    move    a0, v0
     beqz    v0, common_exceptionThrown  /* alloc failed, handle exception */
 
     FETCH(a1, 2)                        /* a1<- FEDC or CCCC */

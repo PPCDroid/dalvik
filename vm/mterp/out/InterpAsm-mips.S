@@ -3380,29 +3380,87 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER: /* 0x6f */
-    /* stub for OP_INVOKE_SUPER */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_SUPER  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_SUPER.S */
+    /*
+     * Handle a "super" method call.
+     *
+     * for: invoke-super, invoke-super/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(s4, 2)                        /* s4<- GFED or CCCC */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    .if     (!0)
+    andi    s4, s4, 15                  /* s4<- D (or stays CCCC) */
+    .endif
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    GET_VREG(a2, s4)                    /* a2<- "this" ptr */
+    sll     t6, t6, a1
+    addu    t6, t6, a3
+    lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
+    lw      a0, offGlue_method(rGLUE)   /* a0<- current method */
+    beqz    a2, common_errNullObject    /* null "this", throw exception */
+    EXPORT_PC()                         /* must export for invoke */
+    bnez    v0, .LOP_INVOKE_SUPER_continue        /* resolved, continue on */
+    lw      a0, offMethod_clazz(a0)     /* a0<- method->clazz */
+    	/* do resolve now */
+    LA(t9, dvmResolveMethod)
+    jalr    t9				/* v0<- call(clazz, ref, flags) */
+    li      a2, METHOD_VIRTUAL          /* resolver method type */
+    bnez    v0, .LOP_INVOKE_SUPER_continue    /* rval null?  no, continue */
+    nop
+    b       common_exceptionThrown      /* yes, handle exception */
+    nop
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_DIRECT: /* 0x70 */
-    /* stub for OP_INVOKE_DIRECT */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_DIRECT  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_DIRECT.S */
+    /*
+     * Handle a direct method call.
+     *
+     * (We could defer the "is 'this' pointer null" test to the common
+     * method invocation code, and use a flag to indicate that static
+     * calls don't count.  If we do this as part of copying the arguments
+     * out we could avoiding loading the first arg twice.)
+     *
+     * for: invoke-direct, invoke-direct/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    FETCH(s4, 2)                        /* s4<- GFED or CCCC */
+    sll     t6, a1, 2
+    addu    t6, t6, a3
+    lw      v0, 0(t6)                   /* v0<- resolved methodToCall */
+    .if     (!0)
+    and     s4, s4, 15                  /* s4<- D (or stays CCCC) */
+    .endif
+    EXPORT_PC()                         /* must export for invoke */
+    GET_VREG(a2, s4)                    /* a2<- "this" ptr */
+    bnez   v0, .LOP_INVOKE_DIRECT_finish       /* resolved, just finish */
+
+    	/* resolve */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    LA(t9,dvmResolveMethod)
+    jalr    t9 				/* v0<- call(clazz, ref, flags) */
+    li      a2, METHOD_DIRECT           /* resolver method type */
+    beqz    v0, common_exceptionThrown  /* didn't resolve, handle exception */
+    GET_VREG(a2, s4)                    /* a2<- "this" ptr (reload) */
+
+.LOP_INVOKE_DIRECT_finish:
+    bnez    a2, common_invokeMethodNoRange /* null "this"? no, continue on */
+    move    a0, v0
+    b       common_errNullObject        /* yes, throw exception */
+    nop
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_STATIC: /* 0x71 */
@@ -3419,16 +3477,33 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_INTERFACE: /* 0x72 */
-    /* stub for OP_INVOKE_INTERFACE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_INTERFACE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_INTERFACE.S */
+    /*
+     * Handle an interface method call.
+     *
+     * for: invoke-interface, invoke-interface/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(a2, 2)                        /* a2<- FEDC or CCCC */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    .if     (!0)
+    andi    a2, a2, 15                  /* a2<- C (or stays CCCC) */
+    .endif
+    EXPORT_PC()                         /* must export for invoke */
+    GET_VREG(a0, a2)                    /* a0<- first arg ("this") */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- methodClassDex */
+    beqz    a0, common_errNullObject    /* if null obj, fail */
+    lw      a2, offGlue_method(rGLUE)   /* a2<- method */
+    LA(t9,dvmFindInterfaceMethodInCache)
+    jalr    t9                          /* v0<- call(class, ref, method, dex) */
+    lw      a0, offObject_clazz(a0)     /* a0<- thisPtr->clazz */
+    bnez    v0, common_invokeMethodNoRange /* jump to common handler  */
+    move    a0, v0
+    b       common_exceptionThrown      /* if null, handle exception */
+    nop
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_UNUSED_73: /* 0x73 */
@@ -3492,29 +3567,91 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER_RANGE: /* 0x75 */
-    /* stub for OP_INVOKE_SUPER_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_SUPER_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_SUPER_RANGE.S */
+/* File: mips/OP_INVOKE_SUPER.S */
+    /*
+     * Handle a "super" method call.
+     *
+     * for: invoke-super, invoke-super/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(s4, 2)                        /* s4<- GFED or CCCC */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    .if     (!1)
+    andi    s4, s4, 15                  /* s4<- D (or stays CCCC) */
+    .endif
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    GET_VREG(a2, s4)                    /* a2<- "this" ptr */
+    sll     t6, t6, a1
+    addu    t6, t6, a3
+    lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
+    lw      a0, offGlue_method(rGLUE)   /* a0<- current method */
+    beqz    a2, common_errNullObject    /* null "this", throw exception */
+    EXPORT_PC()                         /* must export for invoke */
+    bnez    v0, .LOP_INVOKE_SUPER_RANGE_continue        /* resolved, continue on */
+    lw      a0, offMethod_clazz(a0)     /* a0<- method->clazz */
+    	/* do resolve now */
+    LA(t9, dvmResolveMethod)
+    jalr    t9				/* v0<- call(clazz, ref, flags) */
+    li      a2, METHOD_VIRTUAL          /* resolver method type */
+    bnez    v0, .LOP_INVOKE_SUPER_RANGE_continue    /* rval null?  no, continue */
+    nop
+    b       common_exceptionThrown      /* yes, handle exception */
+    nop
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_DIRECT_RANGE: /* 0x76 */
-    /* stub for OP_INVOKE_DIRECT_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_DIRECT_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_DIRECT_RANGE.S */
+/* File: mips/OP_INVOKE_DIRECT.S */
+    /*
+     * Handle a direct method call.
+     *
+     * (We could defer the "is 'this' pointer null" test to the common
+     * method invocation code, and use a flag to indicate that static
+     * calls don't count.  If we do this as part of copying the arguments
+     * out we could avoiding loading the first arg twice.)
+     *
+     * for: invoke-direct, invoke-direct/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    FETCH(s4, 2)                        /* s4<- GFED or CCCC */
+    sll     t6, a1, 2
+    addu    t6, t6, a3
+    lw      v0, 0(t6)                   /* v0<- resolved methodToCall */
+    .if     (!1)
+    and     s4, s4, 15                  /* s4<- D (or stays CCCC) */
+    .endif
+    EXPORT_PC()                         /* must export for invoke */
+    GET_VREG(a2, s4)                    /* a2<- "this" ptr */
+    bnez   v0, .LOP_INVOKE_DIRECT_RANGE_finish       /* resolved, just finish */
+
+    	/* resolve */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    LA(t9,dvmResolveMethod)
+    jalr    t9 				/* v0<- call(clazz, ref, flags) */
+    li      a2, METHOD_DIRECT           /* resolver method type */
+    beqz    v0, common_exceptionThrown  /* didn't resolve, handle exception */
+    GET_VREG(a2, s4)                    /* a2<- "this" ptr (reload) */
+
+.LOP_INVOKE_DIRECT_RANGE_finish:
+    bnez    a2, common_invokeMethodRange /* null "this"? no, continue on */
+    move    a0, v0
+    b       common_errNullObject        /* yes, throw exception */
+    nop
+
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_STATIC_RANGE: /* 0x77 */
@@ -3531,16 +3668,35 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_INTERFACE_RANGE: /* 0x78 */
-    /* stub for OP_INVOKE_INTERFACE_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_INTERFACE_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_INTERFACE_RANGE.S */
+/* File: mips/OP_INVOKE_INTERFACE.S */
+    /*
+     * Handle an interface method call.
+     *
+     * for: invoke-interface, invoke-interface/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(a2, 2)                        /* a2<- FEDC or CCCC */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    .if     (!1)
+    andi    a2, a2, 15                  /* a2<- C (or stays CCCC) */
+    .endif
+    EXPORT_PC()                         /* must export for invoke */
+    GET_VREG(a0, a2)                    /* a0<- first arg ("this") */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- methodClassDex */
+    beqz    a0, common_errNullObject    /* if null obj, fail */
+    lw      a2, offGlue_method(rGLUE)   /* a2<- method */
+    LA(t9,dvmFindInterfaceMethodInCache)
+    jalr    t9                          /* v0<- call(class, ref, method, dex) */
+    lw      a0, offObject_clazz(a0)     /* a0<- thisPtr->clazz */
+    bnez    v0, common_invokeMethodRange /* jump to common handler  */
+    move    a0, v0
+    b       common_exceptionThrown      /* if null, handle exception */
+    nop
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_UNUSED_79: /* 0x79 */
@@ -8041,6 +8197,7 @@ dvmAsmSisterStart:
 .LOP_FILLED_NEW_ARRAY_impl:
     LA(t9,dvmAllocArrayByClass)
     jalr    t9                          /* v0<- call(arClass, length, flags) */
+    move    a0, v0
     beqz    v0, common_exceptionThrown  /* alloc failed, handle exception */
 
     FETCH(a1, 2)                        /* a1<- FEDC or CCCC */
@@ -8125,6 +8282,7 @@ dvmAsmSisterStart:
 .LOP_FILLED_NEW_ARRAY_RANGE_impl:
     LA(t9,dvmAllocArrayByClass)
     jalr    t9                          /* v0<- call(arClass, length, flags) */
+    move    a0, v0
     beqz    v0, common_exceptionThrown  /* alloc failed, handle exception */
 
     FETCH(a1, 2)                        /* a1<- FEDC or CCCC */
@@ -8509,6 +8667,64 @@ dvmAsmSisterStart:
      *  r1: BBBB field ref
      */
 .LOP_SGET_WIDE_resolve:
+
+
+/* continuation for OP_INVOKE_SUPER */
+
+    /*
+     * At this point:
+     *  v0 = resolved base method
+     *  a0 = method->clazz
+     */
+.LOP_INVOKE_SUPER_continue:
+    lw      a1, offClassObject_super(a0)     /* a1<- method->clazz->super */
+    lhu     a2, offMethod_methodIndex(v0)    /* a2<- baseMethod->methodIndex */
+    lw      a3, offClassObject_vtableCount(a1)   /* a3<- super->vtableCount */
+    EXPORT_PC()                         /* must export for invoke */
+    subu    t6, a3, a2                  /* compare (methodIndex, vtableCount) */
+    bltz    t6, .LOP_INVOKE_SUPER_nsm         /* method not present in superclass */
+    lw      a1, offClassObject_vtable(a1)    /* a1<- ...clazz->super->vtable */
+    sll     t6, a2, 2
+    addu    t6, t6, a1
+    bal     common_invokeMethodNoRange /* continue on */
+    lw      a0, 0(t6)                   /* a0<- vtable[methodIndex] */
+
+    /*
+     * Throw a NoSuchMethodError with the method name as the message.
+     *  v0 = resolved base method
+     */
+.LOP_INVOKE_SUPER_nsm:
+    b       common_errNoSuchMethod
+    lw      a1, offMethod_name(v0)      /* a1<- method name */
+
+
+/* continuation for OP_INVOKE_SUPER_RANGE */
+
+    /*
+     * At this point:
+     *  v0 = resolved base method
+     *  a0 = method->clazz
+     */
+.LOP_INVOKE_SUPER_RANGE_continue:
+    lw      a1, offClassObject_super(a0)     /* a1<- method->clazz->super */
+    lhu     a2, offMethod_methodIndex(v0)    /* a2<- baseMethod->methodIndex */
+    lw      a3, offClassObject_vtableCount(a1)   /* a3<- super->vtableCount */
+    EXPORT_PC()                         /* must export for invoke */
+    subu    t6, a3, a2                  /* compare (methodIndex, vtableCount) */
+    bltz    t6, .LOP_INVOKE_SUPER_RANGE_nsm         /* method not present in superclass */
+    lw      a1, offClassObject_vtable(a1)    /* a1<- ...clazz->super->vtable */
+    sll     t6, a2, 2
+    addu    t6, t6, a1
+    bal     common_invokeMethodRange /* continue on */
+    lw      a0, 0(t6)                   /* a0<- vtable[methodIndex] */
+
+    /*
+     * Throw a NoSuchMethodError with the method name as the message.
+     *  v0 = resolved base method
+     */
+.LOP_INVOKE_SUPER_RANGE_nsm:
+    b       common_errNoSuchMethod
+    lw      a1, offMethod_name(v0)      /* a1<- method name */
 
 
 /* continuation for OP_FLOAT_TO_INT */

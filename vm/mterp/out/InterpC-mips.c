@@ -1176,44 +1176,14 @@ GOTO_TARGET_DECL(exceptionThrown);
     FINISH(2);
 
 
-/* File: c/OP_INVOKE_SUPER.c */
-HANDLE_OPCODE(OP_INVOKE_SUPER /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
-    GOTO_invoke(invokeSuper, false);
-OP_END
-
-/* File: c/OP_INVOKE_DIRECT.c */
-HANDLE_OPCODE(OP_INVOKE_DIRECT /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
-    GOTO_invoke(invokeDirect, false);
-OP_END
-
 /* File: c/OP_INVOKE_STATIC.c */
 HANDLE_OPCODE(OP_INVOKE_STATIC /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
     GOTO_invoke(invokeStatic, false);
 OP_END
 
-/* File: c/OP_INVOKE_INTERFACE.c */
-HANDLE_OPCODE(OP_INVOKE_INTERFACE /*vB, {vD, vE, vF, vG, vA}, meth@CCCC*/)
-    GOTO_invoke(invokeInterface, false);
-OP_END
-
-/* File: c/OP_INVOKE_SUPER_RANGE.c */
-HANDLE_OPCODE(OP_INVOKE_SUPER_RANGE /*{vCCCC..v(CCCC+AA-1)}, meth@BBBB*/)
-    GOTO_invoke(invokeSuper, true);
-OP_END
-
-/* File: c/OP_INVOKE_DIRECT_RANGE.c */
-HANDLE_OPCODE(OP_INVOKE_DIRECT_RANGE /*{vCCCC..v(CCCC+AA-1)}, meth@BBBB*/)
-    GOTO_invoke(invokeDirect, true);
-OP_END
-
 /* File: c/OP_INVOKE_STATIC_RANGE.c */
 HANDLE_OPCODE(OP_INVOKE_STATIC_RANGE /*{vCCCC..v(CCCC+AA-1)}, meth@BBBB*/)
     GOTO_invoke(invokeStatic, true);
-OP_END
-
-/* File: c/OP_INVOKE_INTERFACE_RANGE.c */
-HANDLE_OPCODE(OP_INVOKE_INTERFACE_RANGE /*{vCCCC..v(CCCC+AA-1)}, meth@BBBB*/)
-    GOTO_invoke(invokeInterface, true);
 OP_END
 
 /* File: c/OP_EXECUTE_INLINE.c */
