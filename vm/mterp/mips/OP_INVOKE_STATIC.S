@@ -9,7 +9,7 @@
     /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
     /* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
     lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
-    FETCH(a1, 1)                        /* a1<- BBBB
+    FETCH(a1, 1)                        /* a1<- BBBB */
     lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
     sll     t6, a1, 2
     addu    t6, t6, a3

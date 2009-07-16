@@ -3464,16 +3464,33 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_STATIC: /* 0x71 */
-    /* stub for OP_INVOKE_STATIC */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_STATIC  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_STATIC.S */
+    /*
+     * Handle a static method call.
+     *
+     * for: invoke-static, invoke-static/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    sll     t6, a1, 2
+    addu    t6, t6, a3
+    lw      a0, 0(t6)                   /* a0<- resolved methodToCall */
+    EXPORT_PC()                         /* must export for invoke */
+    bnez    a0, common_invokeMethodNoRange /* resolved, continue on */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    LA(t9,dvmResolveMethod)
+    jalr    t9                          /* a0<- call(clazz, ref, flags) */
+    li      a2, METHOD_STATIC           /* resolver method type */
+    bnez    v0, common_invokeMethodNoRange /* if resolved, continue */
+    move    a0, v0
+    b       common_exceptionThrown      /* otherwise, handle exception */
+    nop
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_INTERFACE: /* 0x72 */
@@ -3655,16 +3672,35 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_STATIC_RANGE: /* 0x77 */
-    /* stub for OP_INVOKE_STATIC_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_STATIC_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_STATIC_RANGE.S */
+/* File: mips/OP_INVOKE_STATIC.S */
+    /*
+     * Handle a static method call.
+     *
+     * for: invoke-static, invoke-static/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    lw      a3, offGlue_methodClassDex(rGLUE)    /* a3<- pDvmDex */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
+    sll     t6, a1, 2
+    addu    t6, t6, a3
+    lw      a0, 0(t6)                   /* a0<- resolved methodToCall */
+    EXPORT_PC()                         /* must export for invoke */
+    bnez    a0, common_invokeMethodRange /* resolved, continue on */
+    lw      a3, offGlue_method(rGLUE)   /* a3<- glue->method */
+    lw      a0, offMethod_clazz(a3)     /* a0<- method->clazz */
+    LA(t9,dvmResolveMethod)
+    jalr    t9                          /* a0<- call(clazz, ref, flags) */
+    li      a2, METHOD_STATIC           /* resolver method type */
+    bnez    v0, common_invokeMethodRange /* if resolved, continue */
+    move    a0, v0
+    b       common_exceptionThrown      /* otherwise, handle exception */
+    nop
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_INTERFACE_RANGE: /* 0x78 */
@@ -7786,16 +7822,31 @@ store_OP_REM_LONG_2ADDR:
 /* ------------------------------ */
     .balign 128
 .L_OP_EXECUTE_INLINE: /* 0xee */
-    /* stub for OP_EXECUTE_INLINE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_EXECUTE_INLINE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_EXECUTE_INLINE.S */
+    /*
+     * Execute a "native inline" instruction.
+     *
+     * We need to call:
+     *  dvmPerformInlineOp4Std(arg0, arg1, arg2, arg3, &retval)
+     *
+     * The first four args are in a0-a3, but the last one must be pushed
+     * onto the stack.
+     */
+    /* [opt] execute-inline vAA, {vC, vD, vE, vF}, inline@BBBB */
+    FETCH(s4, 1)                        /* r10<- BBBB */
+    addiu    a1, rGLUE, offGlue_retval  /* r1<- &glue->retval */
+    EXPORT_PC()                         /* can throw */
+    addiu   sp, sp, -8                  /* make room for arg(s) + align */
+    sw      a1, 16(sp)                  /* push &glue->retval */
+    FETCH(s5, 2)                        /* r9<- FEDC */
+    bal     .LOP_EXECUTE_INLINE_continue        /* make call; will return after */
+    srl     a0, rINST, 12               /* r0<- B */
+    addiu   sp, sp, 8                   /* pop stack */
+    beqz    v0, common_exceptionThrown  /* returned false, handle exception */
+    FETCH_ADVANCE_INST(3)               /* advance rPC, load rINST */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
 /* ------------------------------ */
     .balign 128
 .L_OP_UNUSED_EF: /* 0xef */
@@ -7809,16 +7860,14 @@ store_OP_REM_LONG_2ADDR:
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_DIRECT_EMPTY: /* 0xf0 */
-    /* stub for OP_INVOKE_DIRECT_EMPTY */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_DIRECT_EMPTY  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_DIRECT_EMPTY.S */
+    /*
+     * invoke-direct-empty is a no-op in a "standard" interpreter.
+     */
+    FETCH_ADVANCE_INST(3)               /* advance to next instr, load rINST */
+    GET_INST_OPCODE(t7)                 /* t7<- opcode from rINST */
+    GOTO_OPCODE(t7)                     /* execute it */
+
 /* ------------------------------ */
     .balign 128
 .L_OP_UNUSED_F1: /* 0xf1 */
@@ -7832,133 +7881,247 @@ store_OP_REM_LONG_2ADDR:
 /* ------------------------------ */
     .balign 128
 .L_OP_IGET_QUICK: /* 0xf2 */
-    /* stub for OP_IGET_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_IGET_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_IGET_QUICK.S */
+    /* For: iget-quick, iget-object-quick */
+    /* op vA, vB, offset@CCCC */
+    srl     a2, rINST, 12               /* a2<- B */
+    GET_VREG(a3, a2)                    /* a3<- object we're operating on */
+    FETCH(a1, 1)                        /* a1<- field byte offset */
+    beqz    a3, common_errNullObject    /* object was null */
+    srl     a2, rINST, 8                /* a2<- A(+) */
+    addu    a3, a3, a1
+    lw      a0, 0(a3)                   /* a0<- obj.field (always 32 bits) */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    andi    a2, a2, 15
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(a0, a2)                    /* fp[A]<- a0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IGET_WIDE_QUICK: /* 0xf3 */
-    /* stub for OP_IGET_WIDE_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_IGET_WIDE_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_IGET_WIDE_QUICK.S */
+    /* iget-wide-quick vA, vB, offset@CCCC */
+    srl     a2, rINST, 12               /* a2<- B */
+    GET_VREG(a3, a2)                    /* a3<- object we're operating on */
+    FETCH(a1, 1)                        /* a1<- field byte offset */
+    beqz    a3, common_errNullObject    /* bail if object is null */
+    srl     a2, rINST, 8                /* a2<- A(+) */
+    addu    a3, a3, a1
+    lw      a0, 0(a3)                /* a0/a1<- obj.field (64 bits, aligned) */
+    lw      a1, 4(a3)
+    andi    a2, a2, 15
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    sll     a2, a2, 2
+    addu    a3, rFP, a2                 /* a3<- &fp[A] */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    sw      a0, 0(a3)                   /* fp[A]<- a0/a1 */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      a1, 4(a3)
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IGET_OBJECT_QUICK: /* 0xf4 */
-    /* stub for OP_IGET_OBJECT_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_IGET_OBJECT_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_IGET_OBJECT_QUICK.S */
+/* File: mips/OP_IGET_QUICK.S */
+    /* For: iget-quick, iget-object-quick */
+    /* op vA, vB, offset@CCCC */
+    srl     a2, rINST, 12               /* a2<- B */
+    GET_VREG(a3, a2)                    /* a3<- object we're operating on */
+    FETCH(a1, 1)                        /* a1<- field byte offset */
+    beqz    a3, common_errNullObject    /* object was null */
+    srl     a2, rINST, 8                /* a2<- A(+) */
+    addu    a3, a3, a1
+    lw      a0, 0(a3)                   /* a0<- obj.field (always 32 bits) */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    andi    a2, a2, 15
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    SET_VREG(a0, a2)                    /* fp[A]<- a0 */
+    GOTO_OPCODE(t7)                     /* jump to next instruction */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IPUT_QUICK: /* 0xf5 */
-    /* stub for OP_IPUT_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_IPUT_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_IPUT_QUICK.S */
+    /* For: iput-quick, iput-object-quick */
+    /* op vA, vB, offset@CCCC */
+    srl     a2, rINST, 12               /* a2<- B */
+    GET_VREG(a3, a2)                    /* a3<- fp[B], the object pointer */
+    FETCH(a1, 1)                        /* a1<- field byte offset */
+    beqz    a3, common_errNullObject    /* object was null */
+    srl     a2, rINST, 8                /* a2<- A(+) */
+    andi    a2, a2, 15
+    GET_VREG(a0, a2)                    /* a0<- fp[A] */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    addu   a3, a3, a1
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw     a0, 0(a3)                    /* obj.field (always 32 bits)<- a0 */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IPUT_WIDE_QUICK: /* 0xf6 */
-    /* stub for OP_IPUT_WIDE_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_IPUT_WIDE_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_IPUT_WIDE_QUICK.S */
+    /* iput-wide-quick vA, vB, offset@CCCC */
+    srl     a0, rINST, 8                /* a0<- A(+) */
+    srl     a1, rINST, 12               /* a1<- B */
+    andi    a0, a0, 15
+    GET_VREG(a2, a1)                    /* a2<- fp[B], the object pointer */
+    sll     a0, a0, 2
+    addu    a3, rFP, a0                 /* a3<- &fp[A] */
+    beqz    a2, common_errNullObject    /* object was null */
+    lw      a0, 0(a3)                   /* a0/a1<- fp[A] */
+    FETCH(t6, 1)                        /* t6<- field byte offset */
+    lw      a1, 4(a3)
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    addu    a2, a2, t6
+    sw      a0, 0(a2)                 /* obj.field (64 bits, aligned)<- a0/a1 */
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw      a1, 4(a2)
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IPUT_OBJECT_QUICK: /* 0xf7 */
-    /* stub for OP_IPUT_OBJECT_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_IPUT_OBJECT_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_IPUT_OBJECT_QUICK.S */
+/* File: mips/OP_IPUT_QUICK.S */
+    /* For: iput-quick, iput-object-quick */
+    /* op vA, vB, offset@CCCC */
+    srl     a2, rINST, 12               /* a2<- B */
+    GET_VREG(a3, a2)                    /* a3<- fp[B], the object pointer */
+    FETCH(a1, 1)                        /* a1<- field byte offset */
+    beqz    a3, common_errNullObject    /* object was null */
+    srl     a2, rINST, 8                /* a2<- A(+) */
+    andi    a2, a2, 15
+    GET_VREG(a0, a2)                    /* a0<- fp[A] */
+    FETCH_ADVANCE_INST(2)               /* advance rPC, load rINST */
+    addu   a3, a3, a1
+    GET_INST_OPCODE(t7)                 /* extract opcode from rINST */
+    GOTO_OPCODE_SLOT(t7)                /* jump to next instruction */
+    sw     a0, 0(a3)                    /* obj.field (always 32 bits)<- a0 */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_VIRTUAL_QUICK: /* 0xf8 */
-    /* stub for OP_INVOKE_VIRTUAL_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_VIRTUAL_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_VIRTUAL_QUICK.S */
+    /*
+     * Handle an optimized virtual method call.
+     *
+     * for: [opt] invoke-virtual-quick, invoke-virtual-quick/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(a3, 2)                        /* a3<- FEDC or CCCC */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    .if     (!0)
+    andi    a3, a3, 15                  /* a3<- C (or stays CCCC) */
+    .endif
+    GET_VREG(a2, a3)                    /* a2<- vC ("this" ptr) */
+    beqz    a2, common_errNullObject    /* null "this", throw exception */
+    lw      a2, offObject_clazz(a2)     /* a2<- thisPtr->clazz */
+    lw      a2, offClassObject_vtable(a2)  /* a2<- thisPtr->clazz->vtable */
+    EXPORT_PC()                         /* invoke must export */
+    sll     a1, a1, 2
+    addu    a2, a2, a1
+    b       common_invokeMethodNoRange /* continue on */
+    lw      a0, 0(a2)                   /* a0<- vtable[BBBB] */
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_VIRTUAL_QUICK_RANGE: /* 0xf9 */
-    /* stub for OP_INVOKE_VIRTUAL_QUICK_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_VIRTUAL_QUICK_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_VIRTUAL_QUICK_RANGE.S */
+/* File: mips/OP_INVOKE_VIRTUAL_QUICK.S */
+    /*
+     * Handle an optimized virtual method call.
+     *
+     * for: [opt] invoke-virtual-quick, invoke-virtual-quick/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(a3, 2)                        /* a3<- FEDC or CCCC */
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    .if     (!1)
+    andi    a3, a3, 15                  /* a3<- C (or stays CCCC) */
+    .endif
+    GET_VREG(a2, a3)                    /* a2<- vC ("this" ptr) */
+    beqz    a2, common_errNullObject    /* null "this", throw exception */
+    lw      a2, offObject_clazz(a2)     /* a2<- thisPtr->clazz */
+    lw      a2, offClassObject_vtable(a2)  /* a2<- thisPtr->clazz->vtable */
+    EXPORT_PC()                         /* invoke must export */
+    sll     a1, a1, 2
+    addu    a2, a2, a1
+    b       common_invokeMethodRange /* continue on */
+    lw      a0, 0(a2)                   /* a0<- vtable[BBBB] */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER_QUICK: /* 0xfa */
-    /* stub for OP_INVOKE_SUPER_QUICK */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_SUPER_QUICK  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_SUPER_QUICK.S */
+    /*
+     * Handle an optimized "super" method call.
+     *
+     * for: [opt] invoke-super-quick, invoke-super-quick/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(s5, 2)                       /* s5<- GFED or CCCC */
+    lw      a2, offGlue_method(rGLUE)  /* a2<- current method */
+    .if     (!0)
+    andi    s5, s5, 15                 /* s5<- D (or stays CCCC) */
+    .endif
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a2, offMethod_clazz(a2)     /* a2<- method->clazz */
+    EXPORT_PC()                         /* must export for invoke */
+    lw      a2, offClassObject_super(a2) /* a2<- method->clazz->super */
+    GET_VREG(a3, s5)                    /* a3<- "this" */
+    lw      a2, offClassObject_vtable(a2)  /* a2<- ...clazz->super->vtable */
+    sll     t6, a1, 2
+    beqz    a3, common_errNullObject    /* "this" is null, throw exception */
+    addu    t6, t6, a2
+    b       common_invokeMethodNoRange /* continue on */
+    lw      a0, 0(t6)                   /* a0<- super->vtable[BBBB] */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_SUPER_QUICK_RANGE: /* 0xfb */
-    /* stub for OP_INVOKE_SUPER_QUICK_RANGE */
-    SAVE_PC_FP_TO_GLUE()            /* only need to export these two */
-    move    gp, s8
-    la      t9, dvmMterp_OP_INVOKE_SUPER_QUICK_RANGE  /* call */
-    jalr    t9
-    move    a0, rGLUE               /* glue is first arg to function */
-    LOAD_PC_FP_FROM_GLUE()          /* retrieve updated values */
-    FETCH_INST()                    /* load next instruction from rPC */
-    GET_INST_OPCODE(t7)             /* ...trim down to just the opcode */
-    GOTO_OPCODE(t7)                 /* ...and jump to the handler */
+/* File: mips/OP_INVOKE_SUPER_QUICK_RANGE.S */
+/* File: mips/OP_INVOKE_SUPER_QUICK.S */
+    /*
+     * Handle an optimized "super" method call.
+     *
+     * for: [opt] invoke-super-quick, invoke-super-quick/range
+     */
+    /* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+    /* op vAA, {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
+    FETCH(s5, 2)                       /* s5<- GFED or CCCC */
+    lw      a2, offGlue_method(rGLUE)  /* a2<- current method */
+    .if     (!1)
+    andi    s5, s5, 15                 /* s5<- D (or stays CCCC) */
+    .endif
+    FETCH(a1, 1)                        /* a1<- BBBB */
+    lw      a2, offMethod_clazz(a2)     /* a2<- method->clazz */
+    EXPORT_PC()                         /* must export for invoke */
+    lw      a2, offClassObject_super(a2) /* a2<- method->clazz->super */
+    GET_VREG(a3, s5)                    /* a3<- "this" */
+    lw      a2, offClassObject_vtable(a2)  /* a2<- ...clazz->super->vtable */
+    sll     t6, a1, 2
+    beqz    a3, common_errNullObject    /* "this" is null, throw exception */
+    addu    t6, t6, a2
+    b       common_invokeMethodRange /* continue on */
+    lw      a0, 0(t6)                   /* a0<- super->vtable[BBBB] */
+
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_UNUSED_FC: /* 0xfc */
@@ -8855,6 +9018,74 @@ testneg_OP_REM_LONG_2ADDR:
     move    v0, zero
     b       store_OP_REM_LONG_2ADDR
     move    v1, zero
+
+/* continuation for OP_EXECUTE_INLINE */
+
+    /*
+     * Extract args, call function.
+     *  a0 = #of args (0-4)
+     *  s4 = call index
+     *  lr = return addr, above  [DO NOT bl out of here w/o preserving LR]
+     *
+     * I debated with the cost of testing and branching versus just always
+     * loading all registers.  Since I thought error checking for >4 and
+     * branching around all of the loads if arg==0 was all good, I just
+     * left the cost of the other three test/branch there as well.  It would
+     * also be nice if we could error check the call index, but this isn't
+     * even done in the portable version, assumes Dexopt always does the
+     * right thing.  -- Dan
+     */
+.LOP_EXECUTE_INLINE_continue:
+#if 1
+    beqz    a0, 0f
+    subu    t5, a0, 1
+    beqz    t5, 1f
+    subu    t5, a0, 2
+    beqz    t5, 2f
+    subu    t5, a0, 3
+    beqz    t5, 3f
+    subu    t5, a0, 4
+    bgtz    t5, common_abort
+#else
+    /* This is cute, too, but doesn't save any instructions and makes the
+     * fewer arg path longer.
+     */
+    subu    t5, a0, 4
+    bgtz    t5, common_abort
+    li      t6, 4
+    subu    t6, t6, a0
+    sll     t6, t6, 4
+    LA(t5, 4f)
+    addu    t5, t5, t6
+    jr      t5
+    nop
+#endif
+
+4:  andi    t7, s5, 0xf000             /* isolate F */
+    srl     t7, t7, 10
+    addu    t7, t7, rFP
+    lw      a3, 0(t7)                  /* a3<- vF (shift right 12, left 2) */
+3:  andi    t7, s5, 0x0f00             /* isolate E */
+    srl     t7, t7, 6
+    addu    t7, t7, rFP
+    lw      a2, 0(t7)                  /* a2<- vE */
+2:  andi    t7, s5, 0x00f0             /* isolate D */
+    srl     t7, t7, 2
+    addu    t7, t7, rFP
+    lw      a1, 0(t7)                  /* a1<- vD */
+1:  andi    t7, s5, 0x000f             /* isolate C */
+    sll     t7, t7, 2
+    addu    t7, t7, rFP
+    lw      a0, 0(t7)                  /* a0<- vC */
+0:
+    LA(t7, gDvmInlineOpsTable)         /* table of InlineOperation */
+    sll     s4, s4, 4                  /* sizeof=16, "func" is first entry */
+    addu    t7, t7, s4
+    lw      t9, 0(t7)
+    jr      t9
+    nop /* (not reached) */
+
+
 
     .size   dvmAsmSisterStart, .-dvmAsmSisterStart
     .global dvmAsmSisterEnd
