@@ -208,8 +208,8 @@ common_invokeMethodNoRange:
     lw      t6, offGlue_interpStackEnd(rGLUE) /* t6<- interpStackEnd */
     sll	    v0, a3, 2
     subu    a3, s4, v0                /* a3<- bottom (newsave - outsSize) */
-    subu    v0, a3, t6                /* bottom < interpStackEnd? */
-    bltz    v0, .LstackOverflow       /* yes, this frame will overflow stack */
+    sltu    v0, a3, t6                /* bottom < interpStackEnd? */
+    bnez    v0, .LstackOverflow       /* yes, this frame will overflow stack */
 
     /* set up newSaveArea
     */

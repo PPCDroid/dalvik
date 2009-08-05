@@ -16,7 +16,7 @@
     FETCH(a1, 1)                        /* a1<- BBBB */
     lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
     GET_VREG(a2, s4)                    /* a2<- "this" ptr */
-    sll     t6, t6, a1
+    sll     t6, a1, 2
     addu    t6, t6, a3
     lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
     lw      a0, offGlue_method(rGLUE)   /* a0<- current method */

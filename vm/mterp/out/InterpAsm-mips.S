@@ -3346,7 +3346,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH(s5, 2)                        /* s5<- GFED or CCCC */
     sll     t6, a1, 2
     addu    t6, t6, a3
-    lw      v0, 0(a3)                   /* v0<- resolved baseMethod */
+    lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
     .if     (!0)
     andi    s5, s5, 15                  /* s5<- D (or stays CCCC) */
     .endif
@@ -3396,7 +3396,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH(a1, 1)                        /* a1<- BBBB */
     lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
     GET_VREG(a2, s4)                    /* a2<- "this" ptr */
-    sll     t6, t6, a1
+    sll     t6, a1, 2
     addu    t6, t6, a3
     lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
     lw      a0, offGlue_method(rGLUE)   /* a0<- current method */
@@ -3438,7 +3438,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     addu    t6, t6, a3
     lw      v0, 0(t6)                   /* v0<- resolved methodToCall */
     .if     (!0)
-    and     s4, s4, 15                  /* s4<- D (or stays CCCC) */
+    andi    s4, s4, 15                  /* s4<- D (or stays CCCC) */
     .endif
     EXPORT_PC()                         /* must export for invoke */
     GET_VREG(a2, s4)                    /* a2<- "this" ptr */
@@ -3549,7 +3549,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH(s5, 2)                        /* s5<- GFED or CCCC */
     sll     t6, a1, 2
     addu    t6, t6, a3
-    lw      v0, 0(a3)                   /* v0<- resolved baseMethod */
+    lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
     .if     (!1)
     andi    s5, s5, 15                  /* s5<- D (or stays CCCC) */
     .endif
@@ -3601,7 +3601,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     FETCH(a1, 1)                        /* a1<- BBBB */
     lw      a3, offDvmDex_pResMethods(a3)    /* a3<- pDvmDex->pResMethods */
     GET_VREG(a2, s4)                    /* a2<- "this" ptr */
-    sll     t6, t6, a1
+    sll     t6, a1, 2
     addu    t6, t6, a3
     lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
     lw      a0, offGlue_method(rGLUE)   /* a0<- current method */
@@ -3645,7 +3645,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     addu    t6, t6, a3
     lw      v0, 0(t6)                   /* v0<- resolved methodToCall */
     .if     (!1)
-    and     s4, s4, 15                  /* s4<- D (or stays CCCC) */
+    andi    s4, s4, 15                  /* s4<- D (or stays CCCC) */
     .endif
     EXPORT_PC()                         /* must export for invoke */
     GET_VREG(a2, s4)                    /* a2<- "this" ptr */
@@ -9302,8 +9302,8 @@ common_invokeMethodNoRange:
     lw      t6, offGlue_interpStackEnd(rGLUE) /* t6<- interpStackEnd */
     sll	    v0, a3, 2
     subu    a3, s4, v0                /* a3<- bottom (newsave - outsSize) */
-    subu    v0, a3, t6                /* bottom < interpStackEnd? */
-    bltz    v0, .LstackOverflow       /* yes, this frame will overflow stack */
+    sltu    v0, a3, t6                /* bottom < interpStackEnd? */
+    bnez    v0, .LstackOverflow       /* yes, this frame will overflow stack */
 
     /* set up newSaveArea
     */

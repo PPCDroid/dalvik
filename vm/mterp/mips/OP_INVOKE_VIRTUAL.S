@@ -15,7 +15,7 @@
     FETCH(s5, 2)                        /* s5<- GFED or CCCC */
     sll     t6, a1, 2
     addu    t6, t6, a3
-    lw      v0, 0(a3)                   /* v0<- resolved baseMethod */
+    lw      v0, 0(t6)                   /* v0<- resolved baseMethod */
     .if     (!$isrange)
     andi    s5, s5, 15                  /* s5<- D (or stays CCCC) */
     .endif

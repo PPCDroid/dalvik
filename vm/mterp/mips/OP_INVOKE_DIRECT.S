@@ -21,7 +21,7 @@
     addu    t6, t6, a3
     lw      v0, 0(t6)                   /* v0<- resolved methodToCall */
     .if     (!$isrange)
-    and     s4, s4, 15                  /* s4<- D (or stays CCCC) */
+    andi    s4, s4, 15                  /* s4<- D (or stays CCCC) */
     .endif
     EXPORT_PC()                         /* must export for invoke */
     GET_VREG(a2, s4)                    /* a2<- "this" ptr */
