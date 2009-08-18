@@ -276,6 +276,8 @@ public final class VMDebug {
     public static native void dumpHprofData(String fileName) throws IOException;
 
     /**
+     * @hide
+     *
      * 	Starts gdbserver for given process
      *
      * 	Starts gdbserver listening for gdb to connect to port 10000
