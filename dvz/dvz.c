@@ -69,7 +69,7 @@ static void post_run_func (int pid) {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
 
-#ifdef __mips__
+#if defined(__powerpc__) || defined(__mips__)
         sa.sa_handler = (__sighandler_t)signal_forwarder;
 #else
         sa.sa_sigaction = signal_forwarder;
