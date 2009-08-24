@@ -595,17 +595,22 @@ static void Dalvik_dalvik_system_VMDebug_dumpHprofData(const u4* args,
 #define  GDB_CONTROL_NAME      "\0gdb-control"
 #define  GDB_CONTROL_NAME_LEN  (sizeof(GDB_CONTROL_NAME)-1)
 
-void Dalvik_dalvk_system_VMDebug_startGDBServier (const u4* args,
+void Dalvik_dalvk_system_VMDebug_startGDBServer (const u4* args,
     JValue* pResult)
 {
 	struct sockaddr_un	addr;
 	socklen_t		addr_len;
 	int sock;
-	char buf[5];
+	int port;
+	char buf[9];
 
-	UNUSED_PARAMETER(args);
 
-	snprintf(buf, 5, "%04x", getpid());
+        port = args[0];
+	if ( port < 1 || port > 65535 ) {
+		dvmThrowException("Ljava/io/IOException", "Invalid port value");
+		RETURN_VOID();
+	} 
+	snprintf(buf, 9, "%04x%04x", getpid(),port);
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
@@ -624,7 +629,7 @@ void Dalvik_dalvk_system_VMDebug_startGDBServier (const u4* args,
 		RETURN_VOID();
 	}
 
-	write (sock, buf, 4);
+	write (sock, buf, 8);
 	sleep (1);
 	close (sock);
 
@@ -678,8 +683,8 @@ const DalvikNativeMethod dvm_dalvik_system_VMDebug[] = {
         Dalvik_dalvik_system_VMDebug_threadCpuTimeNanos },
     { "dumpHprofData",              "(Ljava/lang/String;)V",
         Dalvik_dalvik_system_VMDebug_dumpHprofData },
-    { "startGDBServier",            "()V",
-	Dalvik_dalvk_system_VMDebug_startGDBServier },
+    { "startGDBServer",            "(I)V",
+	Dalvik_dalvk_system_VMDebug_startGDBServer },
     { NULL, NULL, NULL },
 };
 
