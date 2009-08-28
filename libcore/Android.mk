@@ -145,6 +145,10 @@ endif
 LOCAL_C_INCLUDES += $(JNI_H_INCLUDE)
 LOCAL_MODULE := $(core_magic_local_target)
 core_src_files :=
+ifeq ($(TARGET_ARCH_VERSION),e500)
+# PowerPC/e500 ICEs on one of the files with -O2 (turn it down a bit)
+LOCAL_CFLAGS += -O1
+endif
 
 # Include the sub.mk files.
 $(foreach dir, \
