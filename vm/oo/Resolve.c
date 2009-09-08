@@ -322,7 +322,7 @@ Method* dvmResolveInterfaceMethod(const ClassObject* referrer, u4 methodIdx)
     dexProtoSetFromMethodId(&proto, pDvmDex->pDexFile, pMethodId);
 
     LOGVV("+++ looking for '%s' '%s' in resClass='%s'\n",
-        methodName, methodSig, resClass->descriptor);
+        methodName, /* methodSig*/ "", resClass->descriptor);
     resMethod = dvmFindVirtualMethod(resClass, methodName, &proto);
     if (resMethod == NULL) {
         LOGVV("+++ did not resolve immediately\n");

@@ -294,7 +294,7 @@ static bool checkArrayData(const Method* meth, int curOffset)
     }
 
     valueWidth = arrayData[1];
-    valueCount = *(u4*)(&arrayData[2]);
+    valueCount = arrayData[2] | (((s4)arrayData[3]) << 16);
 
     tableSize = 4 + (valueWidth * valueCount + 1) / 2;
 

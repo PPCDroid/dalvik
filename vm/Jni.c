@@ -19,10 +19,13 @@
 #include "Dalvik.h"
 #include "JniInternal.h"
 
+
 #include <stdlib.h>
 #include <stdarg.h>
 #include <limits.h>
 
+#undef LOG_TAG
+#define LOG_TAG "EMINTS3"
 /*
 Native methods and interaction with the GC
 
@@ -258,11 +261,11 @@ void dvmCallJNIMethod(const u4* args, JValue* pResult, const Method* method,
 
     assert(method->insns != NULL);
 
-    //int i;
-    //LOGI("JNI calling %p (%s.%s %s):\n", method->insns,
-    //    method->clazz->descriptor, method->name, method->signature);
-    //for (i = 0; i < method->insSize; i++)
-    //    LOGI("  %d: 0x%08x\n", i, args[i]);
+    int i;
+    LOGI("JNI calling %p (%s.%s %s):\n", method->insns,
+        method->clazz->descriptor, method->name, method->shorty);
+    for (i = 0; i < method->insSize; i++)
+        LOGI("  %d: 0x%08x\n", i, args[i]);
 
     oldStatus = dvmChangeStatus(self, THREAD_NATIVE);
 
@@ -274,6 +277,7 @@ void dvmCallJNIMethod(const u4* args, JValue* pResult, const Method* method,
         (void*)method->insns, pResult);
     CHECK_STACK_SUM(self);
 
+    LOGI("BACKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK\n");
     dvmChangeStatus(self, oldStatus);
 }
 
@@ -1060,6 +1064,20 @@ void dvmReleaseJniMonitors(Thread* self)
 }
 
 #ifdef WITH_JNI_STACK_CHECK
+
+/* stupid fake crc */
+static u4 dvmInitCrc32(void)
+{
+	return (u4)-1;
+}
+
+static u4 dvmComputeCrc32(u4 crc, const u1 *p, int cnt)
+{
+	while (cnt-- > 0)
+		crc += *p++;
+	return crc;
+}
+
 /*
  * Compute a CRC on the entire interpreted stack.
  *

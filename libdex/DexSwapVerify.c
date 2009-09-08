@@ -362,13 +362,16 @@ static bool isDataSectionType(int mapType) {
 static bool swapMap(CheckState* state, DexMapList* pMap)
 {
     DexMapItem* item = pMap->list;
-    u4 count = pMap->size;
+    u4 count;
     u4 dataItemCount = 0; // Total count of items in the data section.
     u4 dataItemsLeft = state->pHeader->dataSize; // See use below.
     u4 usedBits = 0;      // Bit set: one bit per section
     bool first = true;
     u4 lastOffset = 0;
     
+    SWAP_FIELD4(pMap->size);
+    count = pMap->size;
+
     CHECK_LIST_SIZE(item, count, sizeof(DexMapItem));
 
     while (count--) {
@@ -874,6 +877,7 @@ static void* swapClassDefItem(const CheckState* state, void* ptr) {
     SWAP_INDEX4_OR_NOINDEX(item->sourceFileIdx, state->pHeader->stringIdsSize);
     SWAP_OFFSET4(item->annotationsOff);
     SWAP_OFFSET4(item->classDataOff);
+    SWAP_OFFSET4(item->staticValuesOff);
 
     return item + 1;
 }

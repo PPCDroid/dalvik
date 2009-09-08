@@ -1105,29 +1105,37 @@ static void osNetworkSystem_oneTimeInitializationImpl(JNIEnv* env, jobject obj,
     char useAdbNetworkingProperty[PROPERTY_VALUE_MAX];
     char adbConnectedProperty[PROPERTY_VALUE_MAX];
 
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
     property_get("android.net.use-adb-networking", useAdbNetworkingProperty, "");
     property_get("adb.connected", adbConnectedProperty, "");
 
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
     if (strlen((char *)useAdbNetworkingProperty) > 0
             && strlen((char *)adbConnectedProperty) > 0) {
         useAdbNetworking = 1;
     }
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
 
     memset(&gCachedFields, 0, sizeof(gCachedFields));
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
 
     // initializing InetAddress
 
     jclass iaddrclass = env->FindClass("java/net/InetAddress");
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
 
     if (iaddrclass == NULL) {
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
         jniThrowException(env, "java/lang/ClassNotFoundException",
                 "java.net.InetAddress");
         return;
     }
 
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
     gCachedFields.iaddr_class = (jclass) env->NewGlobalRef(iaddrclass);
 
     jmethodID iaddrclassinit = env->GetMethodID(iaddrclass, "<init>", "()V");
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
 
     if (iaddrclassinit == NULL) {
         jniThrowException(env, "java/lang/NoSuchMethodError", "InetAddress.<init>()");
@@ -1135,10 +1143,12 @@ static void osNetworkSystem_oneTimeInitializationImpl(JNIEnv* env, jobject obj,
     }
 
     gCachedFields.iaddr_class_init = iaddrclassinit;
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
 
     jmethodID iaddrgetbyaddress = env->GetStaticMethodID(iaddrclass,
             "getByAddress", "([B)Ljava/net/InetAddress;");
 
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
     if (iaddrgetbyaddress == NULL) {
         jniThrowException(env, "java/lang/NoSuchMethodError",
                 "InetAddress.getByAddress(byte[] val)");
@@ -1149,6 +1159,7 @@ static void osNetworkSystem_oneTimeInitializationImpl(JNIEnv* env, jobject obj,
 
     jfieldID iaddripaddress = env->GetFieldID(iaddrclass, "ipaddress", "[B");
 
+    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
     if (iaddripaddress == NULL) {
         jniThrowException(env, "java/lang/NoSuchFieldError",
                 "Can't find field InetAddress.ipaddress");
@@ -3357,7 +3368,7 @@ static jobject osNetworkSystem_inheritedChannelImpl(JNIEnv* env, jobject obj) {
         remote_addr.sin_port = 0;
         remote_addr.sin_addr.s_addr = 0;
         address = (jbyte*) malloc(sizeof(jbyte)*4);
-        bzero(address, sizeof(jbyte)*4);
+        memset(address, 0, sizeof(jbyte)*4);
     } else {
         if (AF_INET != remote_addr.sin_family
                 || length != sizeof(struct sockaddr)) {
