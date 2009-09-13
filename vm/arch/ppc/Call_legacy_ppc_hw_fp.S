@@ -370,8 +370,8 @@ sig_loop:
 
 store_i32:
 	slwi	r18, r25, 4	
-	add	r19, r19, r18
-	mtlr	r19
+	add	r18, r19, r18
+	mtlr	r18
 	blrl
 
 	lbz	r20, 0(r27)
@@ -398,8 +398,8 @@ skip_r10_pad:
 	addi	r25, r25, 1	/* pad goes in this register */
 aligned_store:
 	slwi	r18, r25, 4	
-	add	r19, r19, r18
-	mtlr	r19
+	add	r18, r19, r18
+	mtlr	r18
 	blrl
 
 	addi	r25, r25, 1
