@@ -18,8 +18,10 @@
  * Class loading, including bootstrap class loader, linking, and
  * initialization.
  */
+#ifdef __powerpc__
 #define LOG_TAG "EMINTS0"
 #define LOG_CLASS_LOADING 0
+#endif
 
 #include "Dalvik.h"
 #include "libdex/DexClass.h"
@@ -2085,7 +2087,10 @@ static int computeJniArgInfo(const DexProto* proto)
 
     jniArgInfo = returnType << DALVIK_JNI_RETURN_SHIFT;
 
+#ifdef __powerpc__
     LOGV("Invoking dvmPlatformInvokeHints\n");
+#endif
+
     hints = dvmPlatformInvokeHints(proto);
 
     if (hints & DALVIK_JNI_NO_ARG_INFO) {

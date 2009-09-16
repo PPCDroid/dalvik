@@ -918,14 +918,11 @@ static jstring getCanonicalName(JNIEnv *env, jclass jClass,jstring enc) {
 }
 
 static jstring getICUCanonicalName(JNIEnv *env, jclass jClass, jstring enc) {
-    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
 
     UErrorCode error = U_ZERO_ERROR;
     const char* encName = (*env)->GetStringUTFChars(env,enc,NULL);
     const char* canonicalName = NULL;
     jstring ret = NULL;
-
-    LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
 
     if(encName) {
         // BEGIN android-removed
@@ -933,42 +930,33 @@ static jstring getICUCanonicalName(JNIEnv *env, jclass jClass, jstring enc) {
         //     ret = ((*env)->NewStringUTF(env,UTF_16BE));
         // }else
         // END android-removed
-     LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
        if((canonicalName = ucnv_getCanonicalName(encName, "MIME", &error))!=NULL) {
-      LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-          ret = ((*env)->NewStringUTF(env, canonicalName));
+            ret = ((*env)->NewStringUTF(env, canonicalName));
         }else if((canonicalName = ucnv_getCanonicalName(encName, "IANA", &error))!=NULL) {
-       LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-         ret = ((*env)->NewStringUTF(env, canonicalName));
+            ret = ((*env)->NewStringUTF(env, canonicalName));
         }else if((canonicalName = ucnv_getCanonicalName(encName, "", &error))!=NULL) {
-        LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-        ret = ((*env)->NewStringUTF(env, canonicalName));
+            ret = ((*env)->NewStringUTF(env, canonicalName));
         }else if((canonicalName =  ucnv_getAlias(encName, 0, &error)) != NULL) {
-         LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-       /* we have some aliases in the form x-blah .. match those first */
+            /* we have some aliases in the form x-blah .. match those first */
             ret = ((*env)->NewStringUTF(env, canonicalName));
         }else if( ret ==NULL && strstr(encName, "x-") == encName) {
-          LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-      /* check if the converter can be opened with the encName given */
+            /* check if the converter can be opened with the encName given */
             UConverter* conv = NULL;
             error = U_ZERO_ERROR;
             conv = ucnv_open(encName+2, &error);
             if(conv!=NULL) {
                 ret = ((*env)->NewStringUTF(env, encName+2));
             }else{
-           LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-         /* unsupported encoding */
+                /* unsupported encoding */
                 ret = ((*env)->NewStringUTF(env, ""));
             }
             ucnv_close(conv);
         }else{
-            LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-    /* unsupported encoding */
+           /* unsupported encoding */
            ret = ((*env)->NewStringUTF(env, ""));
         }
     }
-     LOGV("%s(env=%p): line=%d\n", __func__, env, __LINE__);
-   (*env)->ReleaseStringUTFChars(env,enc,encName);
+    (*env)->ReleaseStringUTFChars(env,enc,encName);
     return ret;
 }
 

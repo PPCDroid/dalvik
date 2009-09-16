@@ -24,8 +24,11 @@
 #include <stdarg.h>
 #include <limits.h>
 
+#ifdef __powerpc__
 #undef LOG_TAG
 #define LOG_TAG "EMINTS3"
+#endif
+
 /*
 Native methods and interaction with the GC
 
@@ -261,11 +264,13 @@ void dvmCallJNIMethod(const u4* args, JValue* pResult, const Method* method,
 
     assert(method->insns != NULL);
 
+#ifdef __powerpc__
     int i;
     LOGI("JNI calling %p (%s.%s %s):\n", method->insns,
         method->clazz->descriptor, method->name, method->shorty);
     for (i = 0; i < method->insSize; i++)
         LOGI("  %d: 0x%08x\n", i, args[i]);
+#endif
 
     oldStatus = dvmChangeStatus(self, THREAD_NATIVE);
 
@@ -277,7 +282,10 @@ void dvmCallJNIMethod(const u4* args, JValue* pResult, const Method* method,
         (void*)method->insns, pResult);
     CHECK_STACK_SUM(self);
 
+#ifdef __powerpc__
     LOGI("BACKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK\n");
+#endif
+
     dvmChangeStatus(self, oldStatus);
 }
 

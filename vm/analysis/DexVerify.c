@@ -294,7 +294,11 @@ static bool checkArrayData(const Method* meth, int curOffset)
     }
 
     valueWidth = arrayData[1];
+#ifdef __powerpc__
     valueCount = arrayData[2] | (((s4)arrayData[3]) << 16);
+#else
+    valueCount = *(u4*)(&arrayData[2]);
+#endif
 
     tableSize = 4 + (valueWidth * valueCount + 1) / 2;
 
