@@ -42,7 +42,7 @@
  * single file.
  */
 #ifdef __powerpc__
-#define VERY_VERBOSE_LOG
+#undef VERY_VERBOSE_LOG
 #endif
 
 #if defined(VERY_VERBOSE_LOG)
