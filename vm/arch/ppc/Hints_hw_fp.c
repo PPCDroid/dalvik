@@ -26,8 +26,6 @@
 #include <stddef.h>
 #include <sys/stat.h>
 
-#undef LOG_TAG
-#define LOG_TAG "EMINTS1"
 /*
  * The class loader will associate with each method a 32-bit info word
  * (jniArgInfo) to support JNI calls.  The high order 4 bits of this word
@@ -136,7 +134,6 @@ char dbgbuf[32];
     }
 
 
-    LOGV("stakc size is %d\n", stackOffset);
     return stackOffset;
 
 #if 0
