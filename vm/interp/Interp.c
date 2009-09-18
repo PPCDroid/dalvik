@@ -559,7 +559,7 @@ static void copySwappedArrayData(void* dest, const u2* src, u4 size, u2 width)
         /* swap word halves and words */
         for (i = 0; i < (int)(size << 1); i += 2) {
             ((u4*)dest)[i    ] = ((u4)src[(i << 1) + 3] << 16) | (u4)src[(i << 1) + 2];
-            ((u4*)dest)[i + 1] = ((u4)src[(i << 1) + 2] << 16) | (u4)src[(i << 1) + 0];
+            ((u4*)dest)[i + 1] = ((u4)src[(i << 1) + 1] << 16) | (u4)src[(i << 1) + 0];
         }
         break;
     default:
