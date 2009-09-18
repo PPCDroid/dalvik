@@ -79,9 +79,7 @@ else  # !DALVIK_VM_DEBUG
   #LOCAL_CFLAGS += -O2 -Winline
   LOCAL_CFLAGS += -DDVM_SHOW_EXCEPTION=1
   # if you want to try with assertions on the device, add:
-ifeq ($(TARGET_ARCH),ppc)
-  LOCAL_CFLAGS += -UNDEBUG -DDEBUG=1 -DLOG_NDEBUG=1 -DWITH_DALVIK_ASSERT
-endif
+  # LOCAL_CFLAGS += -UNDEBUG -DDEBUG=1 -DLOG_NDEBUG=1 -DWITH_DALVIK_ASSERT
 endif  # !DALVIK_VM_DEBUG
 
 # bug hunting: checksum and verify interpreted stack when making JNI calls
