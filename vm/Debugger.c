@@ -1619,19 +1619,35 @@ void dvmDbgSetStaticFieldValue(RefTypeId refTypeId, FieldId fieldId,
     switch (sfield->field.signature[0]) {
     case JT_BOOLEAN:
         assert(width == 1);
+#ifdef __powerpc__
+        dvmSetStaticFieldBoolean(sfield, value.zz[3]);
+#else
         dvmSetStaticFieldBoolean(sfield, value.z);
+#endif
         break;
     case JT_BYTE:
         assert(width == 1);
+#ifdef __powerpc__
+        dvmSetStaticFieldByte(sfield, value.bb[3]);
+#else
         dvmSetStaticFieldByte(sfield, value.b);
+#endif
         break;
     case JT_SHORT:
         assert(width == 2);
+#ifdef __powerpc__
+        dvmSetStaticFieldShort(sfield, value.ss[1]);
+#else
         dvmSetStaticFieldShort(sfield, value.s);
+#endif
         break;
     case JT_CHAR:
         assert(width == 2);
+#ifdef __powerpc__
+        dvmSetStaticFieldChar(sfield, value.cc[1]);
+#else
         dvmSetStaticFieldChar(sfield, value.c);
+#endif
         break;
     case JT_INT:
         assert(width == 4);

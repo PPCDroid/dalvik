@@ -1972,10 +1972,17 @@ SET_TYPE_FIELD(jdouble, Double);
         return _retok;                                                      \
     }
 CALL_VIRTUAL(jobject, Object, NULL, result.l, true);
+#ifdef __powerpc__
+CALL_VIRTUAL(jboolean, Boolean, 0, result.zz[3], false);
+CALL_VIRTUAL(jbyte, Byte, 0, result.bb[3], false);
+CALL_VIRTUAL(jchar, Char, 0, result.cc[1], false);
+CALL_VIRTUAL(jshort, Short, 0, result.ss[1], false);
+#else
 CALL_VIRTUAL(jboolean, Boolean, 0, result.z, false);
 CALL_VIRTUAL(jbyte, Byte, 0, result.b, false);
 CALL_VIRTUAL(jchar, Char, 0, result.c, false);
 CALL_VIRTUAL(jshort, Short, 0, result.s, false);
+#endif
 CALL_VIRTUAL(jint, Int, 0, result.i, false);
 CALL_VIRTUAL(jlong, Long, 0, result.j, false);
 CALL_VIRTUAL(jfloat, Float, 0.0f, result.f, false);
@@ -2051,10 +2058,17 @@ CALL_VIRTUAL(void, Void, , , false);
         return _retok;                                                      \
     }
 CALL_NONVIRTUAL(jobject, Object, NULL, result.l, true);
+#ifdef __powerpc__
+CALL_NONVIRTUAL(jboolean, Boolean, 0, result.zz[3], false);
+CALL_NONVIRTUAL(jbyte, Byte, 0, result.bb[3], false);
+CALL_NONVIRTUAL(jchar, Char, 0, result.cc[1], false);
+CALL_NONVIRTUAL(jshort, Short, 0, result.ss[1], false);
+#else
 CALL_NONVIRTUAL(jboolean, Boolean, 0, result.z, false);
 CALL_NONVIRTUAL(jbyte, Byte, 0, result.b, false);
 CALL_NONVIRTUAL(jchar, Char, 0, result.c, false);
 CALL_NONVIRTUAL(jshort, Short, 0, result.s, false);
+#endif
 CALL_NONVIRTUAL(jint, Int, 0, result.i, false);
 CALL_NONVIRTUAL(jlong, Long, 0, result.j, false);
 CALL_NONVIRTUAL(jfloat, Float, 0.0f, result.f, false);
@@ -2106,10 +2120,17 @@ CALL_NONVIRTUAL(void, Void, , , false);
         return _retok;                                                      \
     }
 CALL_STATIC(jobject, Object, NULL, result.l, true);
+#ifdef __powerpc__
+CALL_STATIC(jboolean, Boolean, 0, result.zz[3], false);
+CALL_STATIC(jbyte, Byte, 0, result.bb[3], false);
+CALL_STATIC(jchar, Char, 0, result.cc[1], false);
+CALL_STATIC(jshort, Short, 0, result.ss[1], false);
+#else
 CALL_STATIC(jboolean, Boolean, 0, result.z, false);
 CALL_STATIC(jbyte, Byte, 0, result.b, false);
 CALL_STATIC(jchar, Char, 0, result.c, false);
 CALL_STATIC(jshort, Short, 0, result.s, false);
+#endif
 CALL_STATIC(jint, Int, 0, result.i, false);
 CALL_STATIC(jlong, Long, 0, result.j, false);
 CALL_STATIC(jfloat, Float, 0.0f, result.f, false);

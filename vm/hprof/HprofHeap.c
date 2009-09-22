@@ -336,10 +336,17 @@ hprofDumpHeapObject(hprof_context_t *ctx, const Object *obj)
                 t = signatureToBasicTypeAndSize(f->field.signature, &size);
                 hprofAddIdToRecord(rec, hprofLookupStringId(f->field.name));
                 hprofAddU1ToRecord(rec, t);
+#ifdef __powerpc__
+                if (size == 1) {
+                    hprofAddU1ToRecord(rec, (u1)f->value.bb[3]);
+                } else if (size == 2) {
+                    hprofAddU2ToRecord(rec, (u2)f->value.cc[1]);
+#else
                 if (size == 1) {
                     hprofAddU1ToRecord(rec, (u1)f->value.b);
                 } else if (size == 2) {
                     hprofAddU2ToRecord(rec, (u2)f->value.c);
+#endif
                 } else if (size == 4) {
                     hprofAddU4ToRecord(rec, (u4)f->value.i);
                 } else if (size == 8) {

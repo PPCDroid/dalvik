@@ -30,7 +30,7 @@
 # define RETURN_VOID()           do { pResult->i = 0xfefeabab; return; }while(0)
 #endif
 #ifdef __BYTE_ORDER == __BIG_ENDIAN
-#define RETURN_BOOLEAN(_val)    do { pResult->i = 0; pResult->z = (_val); return; } while(0)
+#define RETURN_BOOLEAN(_val)    do { pResult->i = 0; pResult->zz[3] = (_val); return; } while(0)
 #else
 #define RETURN_BOOLEAN(_val)    do { pResult->i = (_val); return; } while(0)
 #endif
