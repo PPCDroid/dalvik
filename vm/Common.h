@@ -78,6 +78,20 @@ typedef signed int          s4;
 typedef signed long long    s8;
 #endif
 
+#if defined(HAVE_ENDIAN_H)
+# include <endian.h>
+#else /*not HAVE_ENDIAN_H*/
+# define __BIG_ENDIAN 4321
+# define __LITTLE_ENDIAN 1234
+# if defined(HAVE_LITTLE_ENDIAN)
+#  define __BYTE_ORDER __LITTLE_ENDIAN
+# else
+#  define __BYTE_ORDER __BIG_ENDIAN
+# endif
+#endif /*not HAVE_ENDIAN_H*/
+
+
+
 /*
  * Storage for primitive types and object references.
  *
@@ -114,20 +128,6 @@ typedef enum { false=0, true=!false } bool;
 #endif
 
 #define NELEM(x) ((int) (sizeof(x) / sizeof((x)[0])))
-
-
-#if defined(HAVE_ENDIAN_H)
-# include <endian.h>
-#else /*not HAVE_ENDIAN_H*/
-# define __BIG_ENDIAN 4321
-# define __LITTLE_ENDIAN 1234
-# if defined(HAVE_LITTLE_ENDIAN)
-#  define __BYTE_ORDER __LITTLE_ENDIAN
-# else
-#  define __BYTE_ORDER __BIG_ENDIAN
-# endif
-#endif /*not HAVE_ENDIAN_H*/
-
 
 #if 0
 /*
