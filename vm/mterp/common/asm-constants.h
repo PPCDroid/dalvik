@@ -111,7 +111,7 @@ MTERP_OFFSET(offGlue_entryPoint,        MterpGlue, entryPoint, 44)
 MTERP_OFFSET(offGlue_entryPoint,        MterpGlue, entryPoint, 40)
 #endif
 /* make sure all JValue union members are stored at the same offset */
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
 MTERP_OFFSET(offGlue_retval_z,          MterpGlue, retval.zz[0], 8)
 #else
 MTERP_OFFSET(offGlue_retval_z,          MterpGlue, retval.z, 8)

@@ -620,7 +620,7 @@ INLINE JValue* dvmFieldPtr(const Object* obj, int offset) {
     return ((JValue*)BYTE_OFFSET(obj, offset));
 }
 
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
 INLINE bool dvmGetFieldBoolean(const Object* obj, int offset) {
     return ((JValue*)BYTE_OFFSET(obj, offset))->zz[3];
 }

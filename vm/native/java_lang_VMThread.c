@@ -198,7 +198,6 @@ static void Dalvik_java_lang_VMThread_setPriority(const u4* args,
     int newPriority = args[1];
     Thread* thread;
    
-    LOGD("%s(newPriority=%d)\n", __func__, newPriority); 
     dvmLockThreadList(NULL);
     thread = dvmGetThreadFromThreadObject(thisPtr);
     if (thread != NULL)

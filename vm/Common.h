@@ -87,7 +87,7 @@ typedef signed long long    s8;
  * little-endian systems.
  */
 typedef union JValue {
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
     u1      zz[4];
     s1      bb[4];
     u2      cc[2];

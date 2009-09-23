@@ -336,7 +336,7 @@ hprofDumpHeapObject(hprof_context_t *ctx, const Object *obj)
                 t = signatureToBasicTypeAndSize(f->field.signature, &size);
                 hprofAddIdToRecord(rec, hprofLookupStringId(f->field.name));
                 hprofAddU1ToRecord(rec, t);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
                 if (size == 1) {
                     hprofAddU1ToRecord(rec, (u1)f->value.bb[3]);
                 } else if (size == 2) {

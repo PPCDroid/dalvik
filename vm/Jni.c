@@ -1972,7 +1972,7 @@ SET_TYPE_FIELD(jdouble, Double);
         return _retok;                                                      \
     }
 CALL_VIRTUAL(jobject, Object, NULL, result.l, true);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
 CALL_VIRTUAL(jboolean, Boolean, 0, result.zz[3], false);
 CALL_VIRTUAL(jbyte, Byte, 0, result.bb[3], false);
 CALL_VIRTUAL(jchar, Char, 0, result.cc[1], false);
@@ -2058,7 +2058,7 @@ CALL_VIRTUAL(void, Void, , , false);
         return _retok;                                                      \
     }
 CALL_NONVIRTUAL(jobject, Object, NULL, result.l, true);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
 CALL_NONVIRTUAL(jboolean, Boolean, 0, result.zz[3], false);
 CALL_NONVIRTUAL(jbyte, Byte, 0, result.bb[3], false);
 CALL_NONVIRTUAL(jchar, Char, 0, result.cc[1], false);
@@ -2120,7 +2120,7 @@ CALL_NONVIRTUAL(void, Void, , , false);
         return _retok;                                                      \
     }
 CALL_STATIC(jobject, Object, NULL, result.l, true);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
 CALL_STATIC(jboolean, Boolean, 0, result.zz[3], false);
 CALL_STATIC(jbyte, Byte, 0, result.bb[3], false);
 CALL_STATIC(jchar, Char, 0, result.cc[1], false);

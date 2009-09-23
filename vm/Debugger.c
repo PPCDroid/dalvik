@@ -1619,7 +1619,7 @@ void dvmDbgSetStaticFieldValue(RefTypeId refTypeId, FieldId fieldId,
     switch (sfield->field.signature[0]) {
     case JT_BOOLEAN:
         assert(width == 1);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
         dvmSetStaticFieldBoolean(sfield, value.zz[3]);
 #else
         dvmSetStaticFieldBoolean(sfield, value.z);
@@ -1627,7 +1627,7 @@ void dvmDbgSetStaticFieldValue(RefTypeId refTypeId, FieldId fieldId,
         break;
     case JT_BYTE:
         assert(width == 1);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
         dvmSetStaticFieldByte(sfield, value.bb[3]);
 #else
         dvmSetStaticFieldByte(sfield, value.b);
@@ -1635,7 +1635,7 @@ void dvmDbgSetStaticFieldValue(RefTypeId refTypeId, FieldId fieldId,
         break;
     case JT_SHORT:
         assert(width == 2);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
         dvmSetStaticFieldShort(sfield, value.ss[1]);
 #else
         dvmSetStaticFieldShort(sfield, value.s);
@@ -1643,7 +1643,7 @@ void dvmDbgSetStaticFieldValue(RefTypeId refTypeId, FieldId fieldId,
         break;
     case JT_CHAR:
         assert(width == 2);
-#ifdef __powerpc__
+#if __BYTE_ORDER == __BIG_ENDIAN
         dvmSetStaticFieldChar(sfield, value.cc[1]);
 #else
         dvmSetStaticFieldChar(sfield, value.c);
