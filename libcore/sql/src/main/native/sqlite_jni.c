@@ -33,6 +33,11 @@
 
 #include "sqlite_jni.h"
 
+
+#ifdef __powerpc__
+#define CANT_PASS_VALIST_AS_CHARPTR
+#endif
+
 #if defined(_WIN32) || !defined(CANT_PASS_VALIST_AS_CHARPTR)
 #define MAX_PARAMS 256
 #else
