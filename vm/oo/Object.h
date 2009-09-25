@@ -663,28 +663,6 @@ INLINE Object* dvmGetFieldObject(const Object* obj, int offset) {
     return ((JValue*)BYTE_OFFSET(obj, offset))->l;
 }
 
-#if __BYTE_ORDER == __BIG_ENDIAN
-INLINE void dvmSetFieldBoolean(Object* obj, int offset, bool val) {
-    JValue *jv = (JValue*)BYTE_OFFSET(obj, offset);
-    jv->i = 0;
-    jv->zz[3] = val;
-}
-INLINE void dvmSetFieldByte(Object* obj, int offset, s1 val) {
-    JValue *jv = (JValue*)BYTE_OFFSET(obj, offset);
-    jv->i = 0;
-    jv->bb[3] = val;
-}
-INLINE void dvmSetFieldShort(Object* obj, int offset, s2 val) {
-    JValue *jv = (JValue*)BYTE_OFFSET(obj, offset);
-    jv->i = 0;
-    jv->ss[1] = val;
-}
-INLINE void dvmSetFieldChar(Object* obj, int offset, u2 val) {
-    JValue *jv = (JValue*)BYTE_OFFSET(obj, offset);
-    jv->i = 0;
-    jv->cc[1] = val;
-}
-#else
 INLINE void dvmSetFieldBoolean(Object* obj, int offset, bool val) {
     ((JValue*)BYTE_OFFSET(obj, offset))->i = val;
 }
@@ -697,7 +675,6 @@ INLINE void dvmSetFieldShort(Object* obj, int offset, s2 val) {
 INLINE void dvmSetFieldChar(Object* obj, int offset, u2 val) {
     ((JValue*)BYTE_OFFSET(obj, offset))->i = val;
 }
-#endif
 INLINE void dvmSetFieldInt(Object* obj, int offset, s4 val) {
     ((JValue*)BYTE_OFFSET(obj, offset))->i = val;
 }
