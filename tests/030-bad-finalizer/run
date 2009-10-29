@@ -24,4 +24,12 @@ cat original-output.txt | awk '
 }
 { 
     print;
+}' | awk '
+/^.*Bus error.*$/ { 
+    # ignore the details of the line
+    print "(segfault)"
+    next;
+}
+{ 
+    print;
 }'
