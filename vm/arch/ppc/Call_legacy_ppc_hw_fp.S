@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 /*
  * JNI method invocation.  This is used to call a C/C++ JNI method.  The
  * argument list has to be pushed onto the native stack according to
@@ -21,7 +22,10 @@
  * This version supports the PPC classic ABI.
  */
 
-
+/*
+ * Load a value from memory pointed by register rS into GP register # num.
+ * Increment pointer in rS
+ */  
 #define LOAD_GPR(num, rS) \
 load_gpr_ ## num: \
 	lwz	r ## num, 0(rS); \
@@ -29,6 +33,10 @@ load_gpr_ ## num: \
 	ori	r0, r0, 0; \
 	blr 
 
+/*
+ * Load a single precision floating value from memory pointed by register rS
+ * into FP register # num. Increment pointer in rS
+ */
 #define LOAD_FPRS(num, rS) \
 load_fprs_ ## num: \
 	lfs	f ## num, 0(rS); \
@@ -36,6 +44,10 @@ load_fprs_ ## num: \
 	ori	r0, r0, 0; \
 	blr
 
+/*
+ * Load a double precision floating value from memory pointed by register rS
+ * into FP register # num. Increment pointer in rS on 8 byte
+ */
 #define LOAD_FPRD(num, rS) \
 load_fprd_ ## num: \
 	lfd	f ## num, 0(rS); \
@@ -44,48 +56,43 @@ load_fprd_ ## num: \
 	blr
 
 /*
-Function prototype:
-
-void dvmPlatformInvoke(void* pEnv, ClassObject* clazz, int argInfo, int argc,
-    const u4* argv, const char* signature, void* func, JValue* pReturn) 
-
-The method we are calling has the form:
-
-  return_type func(JNIEnv* pEnv, ClassObject* clazz, ...)
-    -or-
-  return_type func(JNIEnv* pEnv, Object* this, ...)
-
-We receive a collection of 32-bit values which correspond to arguments from
-the interpreter (e.g. float occupies one, double occupies two).  It's up to
-us to convert these into local calling conventions.
-*/
+ * Function prototype:
+ *
+ *void dvmPlatformInvoke(void* pEnv, ClassObject* clazz, int argInfo, int argc,
+ *   const u4* argv, const char* signature, void* func, JValue* pReturn) 
+ *
+ * The method we are calling has the form:
+ *
+ *  return_type func(JNIEnv* pEnv, ClassObject* clazz, ...)
+ *   -or-
+ *  return_type func(JNIEnv* pEnv, Object* this, ...)
+ *
+ * We receive a collection of 32-bit values which correspond to arguments from
+ * the interpreter (e.g. float occupies one, double occupies two).  It's up to
+ * us to convert these into local calling conventions.
+ */
 
 /*
-PPC  EABI notes:
-
-Big Endian greater than 32-bit value register pairs to memory work as expected.
-Little Endian is bass ackwards, but we don't have to worry about this
-for the memory transfers we are making (only when loading constants).
-
-r0
-r1     stack pointer. must be 16byte aligned
-r3-r10 hold first 8 non-float args to a method (there may be padding)
-f1-f8  hold first 8 float&double args to a method. no padding because the
-       registers are 64bit
-
-r3 holds returns of <= 4 bytes
-r3-r4 hold returns of 8 bytes, low word in TBD for Big Endian.
-FP: f1 hold returns
-
-Only the arguments that don't fit in the r3-r10, f1-f8 registers are placed
-on the stack.Stack is allocated even for arguments passing in registers. The
-first overflow argument starts as offset 8 from sp.
-
-The "sp" must be 16-byte aligned on entry to a function, and any
-64-bit quantities (long long, double) must be 64-bit aligned.  This means
-we have to scan the method signature, identify arguments that must be
-padded, and fix them up appropriately.
-*/
+ * PPC  Classic ABI notes:
+ *
+ * r1     stack pointer. must be 16byte aligned
+ * r3-r10 hold first 8 non-float args to a method (there may be padding)
+ * f1-f8  hold first 8 float&double args to a method. no padding because the
+ *      registers are 64bit
+ *
+ * r3 holds non-float returns of <= 4 bytes
+ * r3-r4 hold non-float returns of 8 bytes, low word in r3.
+ * f1 hold float&double returns
+ * 
+ * Only the arguments that don't fit in the r3-r10, f1-f8 registers are placed
+ * on the stack. Stack is NOT allocated for arguments passing in registers. The
+ * first overflow argument starts as offset 8 from sp.
+ * 
+ * The "sp" must be 16-byte aligned on entry to a function, and any
+ * 64-bit quantities (long long, double) must be 64-bit aligned.  This means
+ * we have to scan the method signature, identify arguments that must be
+ * padded, and fix them up appropriately.
+ */
 
 	.text
 	.align  2
@@ -132,41 +139,28 @@ LOAD_FPRD(8, r28)
  * For a virtual method call, the "this" reference is in argv[0].
  *
  * argInfo (32-bit int) layout:
- *   SRRRFFFF FFFFFFFF FFFFFFFF FFZLLLLM
- *       FFFF FFFFFFFF FFFFFFFF FFZLLLL0
- *       0000 00000000 LLLLLLL LLLLLLLL1
+ *   0RRRNNNN NNNNNNNN LLLLLLLL LLLLLLLL
  *
- *   M - If not set, then there are up to 24 arguments with possible padding
- *       If set, the the lower 16-bits indicate the stack size required.
- *   L - number of  words of storage required on the stack (0-28 words)
- *   Z - always 0.  Mainly due to first arg always aligned, not worth the
- *   	 complexity of trying to pack flags.  dvmPlatformInvoke assembler
- *   	 relies on this to eliminate a masking operation.
- *   F - pad flag -- if set, write a pad word to the stack before copying
- *       the next 32 bits
+ *   L - number of  words of storage required on the stack
+ *   N - not used
  *
- * With this arrangement we can efficiently push up to 24 words of arguments
- * onto the stack.  Anything requiring more than that -- which should happen
- * rarely to never -- can do the slow signature scan.
  */
 dvmPlatformInvoke:
 	cmpwi	cr0, r4, 0
 	bne	static_method
 
 	/* Not static method, load r4 with *argv++ ("this") and argc-- */
-	subi	r6, r6, 1	/* fixme why gcc used r31 ? */
+	subi	r6, r6, 1
 	lwz	r4, 0(r7)
 	addi	r7, r7, 4
 
 static_method:
 	/* Test to see if the hint has argument information for the fast
 	 * path, or if we have to do the signature scan.
+	 *
+	 * TODO: fast path is not implemented for PPC yet. 
 	 */
-/*
-	andi.	r11, r5, 0x0001
-	bne	sig_scan
-*/
-	b sig_scan /* no fast path w/o sig scan for now */
+	b sig_scan /* no fast path w/o sig scan for now, lets go scan */
 
 copy_done:
 	mtlr	r26
@@ -204,21 +198,8 @@ void_return:
 	mr	r11, r17
 	mr	r12, r31
 
-	lwz	r31, -4(r11)
-	lwz	r30, -8(r11)
-	lwz	r29, -12(r11)
-	lwz	r28, -16(r11)
-	lwz	r27, -20(r11)
-	lwz	r26, -24(r11)
-	lwz	r25, -28(r11)
-	lwz	r24, -32(r11)
-	lwz	r23, -36(r11)
-	lwz	r22, -40(r11)
-	lwz	r21, -44(r11)
-	lwz	r20, -48(r11)
-	lwz	r19, -52(r11)
-	lwz	r18, -56(r11)
-	lwz	r17, -60(r11)
+	/* restore r17-r31 */
+	lmw	r17, -60(r11)
 
 	lwz	r0, 4(r11)
 	stwux	r1, r1, r12
@@ -229,72 +210,37 @@ void_return:
 	/*
 	 * Slow path.
 	 *
-	 * I made an assumption here that even if we don't set the
-	 * DALVIK_JNI_NO_ARG_INFO flag in the hints we will get the
-	 * valid signature pointer.  The reason for this is the Hints
-	 * function has already calculated the stack size, but we don't
-	 * know if we need to stuff pad values for S8 ('J') or double ('D')
-	 * data objects.
+	 * The Hints function has already calculated the stack size, but we
+	 * don't know if we need to stuff pad values for S8 ('J') or
+	 * double ('D')data objects.
 	 *
 	 * So, we allocate the stack, but then have to scan the signature
 	 * while moving the objects to see if any alignment is needed.
 	 */
-
 sig_scan:
-	mr	r11, r1		/* Original stack pointer */
+	mr	r11, r1		    /* Original stack pointer */
+ 
+	rlwinm	r12, r5, 0, 16, 31  /* get required stack size in words */
 
-	rlwinm	r12, r5, 0, 16, 31
+	addi	r12, r12, 4	    /* get 4 words more */
+	addi	r12, r12, 2	    /* 2 words for back chain and LR */
+	addi	r12, r12, 15	    /* 15 words for GPR save area */
 
-	addi	r12, r12, 4	   /* get 4 words more */
-	addi	r12, r12, 2	   /* 2 words for back chain and LR */
-	addi	r12, r12, 15	   /* 15 words for GPR save area */
-
-	rlwinm	r12, r12, 0, 16, 29 /* FIXME! Get number of 16byte chunks of stack */
+	rlwinm	r12, r12, 0, 16, 29 /* stack must be 16-byte aligned */
 
 	slwi	r12, r12, 2	    /* Convert to bytes of stack */
 	neg	r12, r12
 
-	/*
-	 * FIXME: more computation here to adjust stack size (r12)  for space
-	 * required for GPR save area
-	 */
-	stwux	r1, r1, r12	/* allocate the stack */
+	stwux	r1, r1, r12	    /* allocate the stack */
 	neg	r12, r12
-	addi	r12, r12, 4
 	mflr	r0
 	stw	r0, 4(r11)
-	subi	r12, r12, 4
 
-	stw	r31, -4(r11)	/* Save non-volatile regs in GPR save area */
-	stw	r30, -8(r11)
-	stw	r29, -12(r11)
+	/* Save non-volatile regs r17-r31 in GPR save area */
+	stmw	r17, -60(r11)
 
-	/* will be used to relocate needed values from r3-r10 */
-	stw	r28, -16(r11)
-	stw	r27, -20(r11)
-	stw	r26, -24(r11)
-
-	/* gpr and fpr counts */
-	stw	r25, -28(r11)
-	stw	r24, -32(r11)
-
-
-	/* address of GPR/FPR load instructions array */
-	stw	r23, -36(r11) /* GPR */
-	stw	r22, -40(r11) /* float */
-	stw	r21, -44(r11) /* double */
-
-	/* "working" hourses */
-	stw	r20, -48(r11)
-	stw	r19, -52(r11)
-	stw	r18, -56(r11)
-
-	/* original stack pointer */
-	stw	r17, -60(r11)
-
-
-	mr	r31, r12	/* bytes of stack in r30 */
-	mr	r17, r11	/* original stack pointer */
+	mr	r31, r12	/* bytes of stack allocated in r31 */
+	mr	r17, r11	/* original stack pointer in r17 */
 
 	/*
 	 * Get a pointer for storing the args.
@@ -306,32 +252,16 @@ sig_scan:
 	/*
 	 * Get the return type; shift is sign extended
 	 * but current assumption is that S bit is 
-	 * never set (a method w/ ~32k parameters 
-	 * anyone ?)
+	 * never set  
 	 */
-	srwi	r30, r5, 28	/* FIXME: srawi	r30, r5, 28 */
+	srwi	r30, r5, 28
 	mr	r29, r10	/* save return buffer */
 
 	mr	r28, r7
 	mr	r27, r8
 	mr	r26, r9
 
-	/*
-	 * Currently:
-	 *	r3	pEnv
-	 *	r4	clazz or 'this'
-	 *	r28	argv
-	 *   	r27	short signature
-	 *   	r26	func
-	 *	r12	pointer for storing the args
-	 *	r31	bytes of stack allocated
-	 *	r30	return type
-	 *	r29	return buffer
-	 */
-
-	/* Copy loop.
-	*/
-	/* initialize grp and fpr counts */
+	/* initialize GPR and FPR counts */
 	li	r25, 0
 	li	r24, 0
 
@@ -345,6 +275,32 @@ sig_scan:
 	lis	r21, load_fprd_1@ha
 	addi	r21, r21, load_fprd_1@l
 
+	/*
+	 * Currently:
+	 *	r3	don't touch
+	 *	r4	don't touch
+	 *	r12	pointer for storing the args
+	 * 	r17	original stack pointer
+	 *	r18-r20	"working  hourses"
+	 * 	r21	pointer to array of routines to store double precision
+	 *	  	floating value in FPR
+	 *	r22	pointer to array of routines to store single precision
+	 *	   	floating value in FPR
+	 * 	r23	pointer to array of routines to store non-floating
+	 *	   	value in GPR. r3 and r4 are already holding needed
+	 * 	   	values, so r5 thru r10 are used for non-floating
+	 * 	   	arguments
+	 * 	r24	counter of used up FP registers
+	 * 	r25	counter of used up GP registers
+	 *   	r26	method to call
+	 *   	r27	short signature
+	 *	r28	argv
+	 *	r29	return buffer
+	 *	r30	return type
+	 *	r31	bytes of stack allocated
+	 */
+
+	/* Copy loop */
 	addi	r27, r27, 1	/* sig[0] stores return type, skip it */ 
 	lbz	r20, 0(r27)	/* Prime the pump */
 sig_loop:
@@ -406,7 +362,7 @@ aligned_store:
 	b	store_i32
 
 store_in_fpr:
-	cmpwi	cr0, r24, 8 /* all 8 FPRs exhausted ? */
+	cmpwi	cr0, r24, 8	/* all 8 FPRs exhausted ? */
 	bge	store_on_stack 
 
 	slwi	r18, r24, 4
