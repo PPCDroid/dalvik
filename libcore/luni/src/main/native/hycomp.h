@@ -22,6 +22,10 @@
 #define LINUX 1
 #endif
 
+#ifdef __powerpc__
+#define HYPPC32
+#endif
+
 /**
  * USE_PROTOTYPES:         Use full ANSI prototypes.
  *
