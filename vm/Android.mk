@@ -261,8 +261,8 @@ else
 		arch/ppc/Call_legacy_ppc_hw_fp.S \
 		arch/ppc/Hints_hw_fp.c
     LOCAL_SRC_FILES += \
-		mterp/out/InterpC-allstubs.c \
-		mterp/out/InterpAsm-allstubs.S
+		mterp/out/InterpC-ppc.c \
+		mterp/out/InterpAsm-ppc.S
   else
 	# unknown architecture, try to use FFI
     LOCAL_C_INCLUDES += external/libffi/$(TARGET_OS)-$(TARGET_ARCH)

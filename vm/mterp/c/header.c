@@ -69,7 +69,7 @@
 //# define NO_UNALIGN_64__UNION
 # define NO_UNALIGN_64__MEMCPY
 #endif
-#if defined(__mips__)
+#if defined(__mips__) || defined(__powerpc__)
 # define NO_UNALIGN_64__UNION
 # define NO_UNALIGN_64__MEMCPY
 #endif

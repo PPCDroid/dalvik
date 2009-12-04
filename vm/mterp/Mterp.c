@@ -46,7 +46,7 @@ bool dvmCheckAsmConstants(void)
      * If an instruction overflows the handler size limit, it will
      * push everything up and alter the total size.  Check it here.
      */
-#ifdef __mips__
+#if defined(__mips__) || defined(__powerpc__)
     const int width = 128;
 #else
     const int width = 64;
