@@ -5,22 +5,6 @@
 	/*
 	 * Compare two 64-bit values.  Puts 0, 1, or -1 into the destination
 	 * register based on the results of the comparison.
-	 *
-	 * We load the full values with LDM, but in practice many values could
-	 * be resolved by only looking at the high word.  This could be made
-	 * faster or slower by splitting the LDM into a pair of LDRs.
-	 *
-	 * If we just wanted to set condition flags, we could do this:
-	 *  subs    ip, r0, r2
-	 *  sbcs    ip, r1, r3
-	 *  subeqs  ip, r0, r2
-	 * Leaving { <0, 0, >0 } in ip.  However, we have to set it to a specific
-	 * integer value, which we can do with 2 conditional mov/mvn instructions
-	 * (set 1, set -1; if they're equal we already have 0 in ip), giving
-	 * us a constant 5-cycle path plus a branch at the end to the
-	 * instruction epilogue code.  The multi-compare approach below needs
-	 * 2 or 3 cycles + branch if the high word doesn't match, 6 + branch
-	 * in the worst case (the 64-bit values are equal).
 	 */
 	/* cmp-long vAA, vBB, vCC */
 
@@ -36,13 +20,12 @@
 
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 
-	/* perform branch-less r3 > r5 ? 1 : (r3 < r5 ? -1 : 0) */
-	sub.	r0, r3, r5			/* r0<- r3 - r5 (update CR) */
-	beq	0f				/* same check low order word */
-	neg	r7, r0				/* r7<- -r0 */
-	srawi	r4, r0, 31			/* r4<- (int)r0 >> 31 */
-	srwi	r3, r7, 31			/* r3<- (unsigned int)-r0 */
-	or	r3, r3, r4			/* r3<- r3 | r4 */
+	/* comparing high half of the long */
+	cmpw	r3,r5
+	beq 	0f
+	li	r3,1
+	bge	1f
+	neg	r3,r3
 	b	1f				/* done */
 	/* perform branch-less (unsigned) r4 > r6 ? 1 : (r4 < r6 ? -1 : 0) */
 0:	subf	r5, r6, r4
