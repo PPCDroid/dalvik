@@ -266,12 +266,29 @@ unspecified registers or condition codes.
 /*
  * Get/set the double precision value
  * _vreg_s is already shifted by 2
+ * 
+ * Split 8-byte double into two 4-byte integer and merge them back on the stack to get proper alignment for lfdx.
  */
 #define GET_VREG_D_S(_reg, _vreg_s) \
-	lfdx	_reg, rFP, _vreg_s
+	addi	r20, _vreg_s, 4; \
+	lwzx	r21, rFP, _vreg_s; \
+	lwzx	r22, rFP, r20; \
+	addi	r1, r1, -8; \
+	stw	r21, 0(r1); \
+	stw	r22, 4(r1); \
+	li	r20, 0; \
+	lfdx	_reg, r1, r20; \
+	addi	r1, r1, 8
 
 #define SET_VREG_D_S(_reg, _vreg_s) \
-	stfdx	_reg, rFP, _vreg_s
+	addi	r1, r1, -8; \
+	stfd	_reg, 0(r1); \
+	lwz	r21, 0(r1); \
+	lwz	r22, 4(r1); \
+	addi	r1, r1, 8; \
+	stwx	r21, rFP, _vreg_s; \
+	addi	r20, _vreg_s, 4; \
+	stwx	r22, rFP, r20
 
 /*
  * This is a #include, not a %include, because we want the C pre-processor
@@ -1516,19 +1533,8 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	b .LOP_CMPL_DOUBLE_split
 
-	fcmpu	cr7, f1, f2			/* compare f1, f2 */
-	li	r3, -1				/* set result if following comparison true */
-	blt-	cr7, 0f				/* branch on f1 < f2 */
-	li	r3, 1				/* set result if following comparison true */
-	bgt-	cr7, 0f				/* branch on f1 > f2 */
-	li	r3, 0				/* set result if following comparison true */
-	beq-	cr7, 0f				/* branch on f1 == f2 */
-	li	r3, -1				/* either f1 or f2 is a NaN */
-0:
-	SET_VREG_S(r3, r19)			/* vAA<- e3 */
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 /* ------------------------------ */
     .balign 128
@@ -1563,19 +1569,8 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	b .LOP_CMPG_DOUBLE_split
 
-	fcmpu	cr7, f1, f2			/* compare f1, f2 */
-	li	r3, -1				/* set result if following comparison true */
-	blt-	cr7, 0f				/* branch on f1 < f2 */
-	li	r3, 1				/* set result if following comparison true */
-	bgt-	cr7, 0f				/* branch on f1 > f2 */
-	li	r3, 0				/* set result if following comparison true */
-	beq-	cr7, 0f				/* branch on f1 == f2 */
-	li		r3, 1				/* either f1 or f2 is a NaN */
-0:
-	SET_VREG_S(r3, r19)			/* vAA<- e3 */
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 
 /* ------------------------------ */
@@ -5585,14 +5580,8 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
-	fadd	f1, f1, f2					/* f3<- op, r3-r6 changed */
-					/* optional op; more space */
+	b .LOP_ADD_DOUBLE_split
 
-	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
-
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 
 /* ------------------------------ */
@@ -5617,14 +5606,8 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
-	fsub	f1, f1, f2					/* f3<- op, r3-r6 changed */
-					/* optional op; more space */
+	b .LOP_SUB_DOUBLE_split
 
-	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
-
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 
 /* ------------------------------ */
@@ -5649,14 +5632,8 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
-	fmul	f1, f1, f2					/* f3<- op, r3-r6 changed */
-					/* optional op; more space */
+	b .LOP_MUL_DOUBLE_split
 
-	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
-
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 
 /* ------------------------------ */
@@ -5681,14 +5658,8 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
-	fdiv	f1, f1, f2					/* f3<- op, r3-r6 changed */
-					/* optional op; more space */
+	b .LOP_DIV_DOUBLE_split
 
-	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
-
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 
 /* ------------------------------ */
@@ -5713,14 +5684,8 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
-	bl	fmod@plt					/* f3<- op, r3-r6 changed */
-					/* optional op; more space */
+	b .LOP_REM_DOUBLE_split
 
-	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
-
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 
 /* ------------------------------ */
@@ -6750,13 +6715,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_D_S(f1, r19)			/* f1<- vA */
 	GET_VREG_D_S(f2, r6)			/* f2<- vB */
-	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
-	fadd	f1, f1, f2					/* result<- op, r3-r6 changed */
-					/* optional op; more space */
-	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+	b .LOP_ADD_DOUBLE_2ADDR_split
+
 
 
 /* ------------------------------ */
@@ -6776,13 +6737,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_D_S(f1, r19)			/* f1<- vA */
 	GET_VREG_D_S(f2, r6)			/* f2<- vB */
-	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
-	fsub	f1, f1, f2					/* result<- op, r3-r6 changed */
-					/* optional op; more space */
-	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+	b .LOP_SUB_DOUBLE_2ADDR_split
+
 
 
 /* ------------------------------ */
@@ -6802,13 +6759,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_D_S(f1, r19)			/* f1<- vA */
 	GET_VREG_D_S(f2, r6)			/* f2<- vB */
-	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
-	fmul	f1, f1, f2					/* result<- op, r3-r6 changed */
-					/* optional op; more space */
-	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+	b .LOP_MUL_DOUBLE_2ADDR_split
+
 
 
 /* ------------------------------ */
@@ -6828,13 +6781,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_D_S(f1, r19)			/* f1<- vA */
 	GET_VREG_D_S(f2, r6)			/* f2<- vB */
-	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
-	fdiv	f1, f1, f2					/* result<- op, r3-r6 changed */
-					/* optional op; more space */
-	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+	b .LOP_DIV_DOUBLE_2ADDR_split
+
 
 
 /* ------------------------------ */
@@ -6854,13 +6803,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_D_S(f1, r19)			/* f1<- vA */
 	GET_VREG_D_S(f2, r6)			/* f2<- vB */
-	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
-	bl fmod@plt					/* result<- op, r3-r6 changed */
-					/* optional op; more space */
-	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+	b .LOP_REM_DOUBLE_2ADDR_split
+
 
 
 /* ------------------------------ */
@@ -8135,6 +8080,42 @@ dvmAsmSisterStart:
 	bl      dvmThrowException@plt
 	b       common_exceptionThrown
 
+/* continuation for OP_CMPL_DOUBLE */
+
+.LOP_CMPL_DOUBLE_split:
+
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+
+	fcmpu	cr7, f1, f2			/* compare f1, f2 */
+	li	r3, -1				/* set result if following comparison true */
+	blt-	cr7, 0f				/* branch on f1 < f2 */
+	li	r3, 1				/* set result if following comparison true */
+	bgt-	cr7, 0f				/* branch on f1 > f2 */
+	li	r3, 0				/* set result if following comparison true */
+	beq-	cr7, 0f				/* branch on f1 == f2 */
+	li	r3, -1				/* either f1 or f2 is a NaN */
+0:
+	SET_VREG_S(r3, r19)			/* vAA<- e3 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_CMPG_DOUBLE */
+
+.LOP_CMPG_DOUBLE_split:
+
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+
+	fcmpu	cr7, f1, f2			/* compare f1, f2 */
+	li	r3, -1				/* set result if following comparison true */
+	blt-	cr7, 0f				/* branch on f1 < f2 */
+	li	r3, 1				/* set result if following comparison true */
+	bgt-	cr7, 0f				/* branch on f1 > f2 */
+	li	r3, 0				/* set result if following comparison true */
+	beq-	cr7, 0f				/* branch on f1 == f2 */
+	li		r3, 1				/* either f1 or f2 is a NaN */
+0:
+	SET_VREG_S(r3, r19)			/* vAA<- e3 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
 /* continuation for OP_INVOKE_SUPER */
 .LOP_INVOKE_SUPER_nsm:
 	lwz	r4, offMethod_name(r3)		/* r4<- method name */
@@ -8247,6 +8228,131 @@ dvmAsmSisterStart:
 	stw	r4, 4(r19)			/* lo */
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & exec */
+
+/* continuation for OP_ADD_DOUBLE */
+
+.LOP_ADD_DOUBLE_split:
+
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+					/* optional op; may set condition codes */
+	fadd	f1, f1, f2					/* f3<- op, r3-r6 changed */
+					/* optional op; more space */
+
+	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
+
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_SUB_DOUBLE */
+
+.LOP_SUB_DOUBLE_split:
+
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+					/* optional op; may set condition codes */
+	fsub	f1, f1, f2					/* f3<- op, r3-r6 changed */
+					/* optional op; more space */
+
+	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
+
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_MUL_DOUBLE */
+
+.LOP_MUL_DOUBLE_split:
+
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+					/* optional op; may set condition codes */
+	fmul	f1, f1, f2					/* f3<- op, r3-r6 changed */
+					/* optional op; more space */
+
+	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
+
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_DIV_DOUBLE */
+
+.LOP_DIV_DOUBLE_split:
+
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+					/* optional op; may set condition codes */
+	fdiv	f1, f1, f2					/* f3<- op, r3-r6 changed */
+					/* optional op; more space */
+
+	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
+
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_REM_DOUBLE */
+
+.LOP_REM_DOUBLE_split:
+
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+					/* optional op; may set condition codes */
+	bl	fmod@plt					/* f3<- op, r3-r6 changed */
+					/* optional op; more space */
+
+	SET_VREG_D_S(f1, r19)			/* vAA/vAA+1<- f1 */
+
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_ADD_DOUBLE_2ADDR */
+
+.LOP_ADD_DOUBLE_2ADDR_split:
+
+	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
+
+					/* optional op; may set condition codes */
+	fadd	f1, f1, f2					/* result<- op, r3-r6 changed */
+					/* optional op; more space */
+	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_SUB_DOUBLE_2ADDR */
+
+.LOP_SUB_DOUBLE_2ADDR_split:
+
+	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
+
+					/* optional op; may set condition codes */
+	fsub	f1, f1, f2					/* result<- op, r3-r6 changed */
+					/* optional op; more space */
+	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_MUL_DOUBLE_2ADDR */
+
+.LOP_MUL_DOUBLE_2ADDR_split:
+
+	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
+
+					/* optional op; may set condition codes */
+	fmul	f1, f1, f2					/* result<- op, r3-r6 changed */
+					/* optional op; more space */
+	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_DIV_DOUBLE_2ADDR */
+
+.LOP_DIV_DOUBLE_2ADDR_split:
+
+	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
+
+					/* optional op; may set condition codes */
+	fdiv	f1, f1, f2					/* result<- op, r3-r6 changed */
+					/* optional op; more space */
+	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
+/* continuation for OP_REM_DOUBLE_2ADDR */
+
+.LOP_REM_DOUBLE_2ADDR_split:
+
+	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
+
+					/* optional op; may set condition codes */
+	bl fmod@plt					/* result<- op, r3-r6 changed */
+					/* optional op; more space */
+	SET_VREG_D_S(f1, r19)			/* vAA<- f1 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
 /* continuation for OP_EXECUTE_INLINE */
 

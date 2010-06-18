@@ -31,6 +31,12 @@
 	GET_VREG_D_S(f2, r6)			/* f2<- vCC+1 */
 	GET_VREG_D_S(f1, r5)			/* f1<- vBB+1 */
 
+	b .L${opcode}_split
+
+%break
+
+.L${opcode}_split:
+
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 
 	fcmpu	cr7, f1, f2			/* compare f1, f2 */

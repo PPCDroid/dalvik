@@ -11,6 +11,13 @@
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_D_S(f1, r19)			/* f1<- vA */
 	GET_VREG_D_S(f2, r6)			/* f2<- vB */
+
+	b .L${opcode}_split
+
+%break
+
+.L${opcode}_split:
+
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
 	$preinstr				/* optional op; may set condition codes */
