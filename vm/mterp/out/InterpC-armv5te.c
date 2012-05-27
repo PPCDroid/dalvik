@@ -75,6 +75,10 @@
 //# define NO_UNALIGN_64__UNION
 # define NO_UNALIGN_64__MEMCPY
 #endif
+#if defined(__powerpc__)
+# define NO_UNALIGN_64__UNION
+# define NO_UNALIGN_64__MEMCPY
+#endif
 
 //#define LOG_INSTR                   /* verbose debugging */
 /* set and adjust ANDROID_LOG_TAGS='*:i jdwp:i dalvikvm:i dalvikvmi:i' */
