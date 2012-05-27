@@ -1,0 +1,8 @@
+*.class
+*.dex
+*.jar
+*.lst
+023-many-interfaces/func-decl
+023-many-interfaces/iface-gen
+023-many-interfaces/src/Interface*.java
+056-const-string-jumbo/src/Zorch*.java
