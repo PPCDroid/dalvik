@@ -21,7 +21,7 @@ set -e
 gcc -o iface-gen iface-gen.c
 ./iface-gen
 
-mkdir classes
+mkdir -p classes
 ${JAVAC} -d classes src/*.java
 
 dx --debug --dex --dump-to=classes.lst --output=classes.dex classes

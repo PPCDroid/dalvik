@@ -19,7 +19,7 @@ set -e
 
 # We compile for a 1.4 target to suppress the use of EnclosingMethod
 # attributes.
-mkdir classes
+mkdir -p classes
 ${JAVAC} -source 1.4 -target 1.4 -d classes `find src -name '*.java'`
 
 # Suppress stderr to keep the inner class warnings out of the expected output.
