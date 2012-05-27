@@ -43,6 +43,9 @@
 #if defined(__ARM_EABI__)
 # define MTERP_NO_UNALIGN_64
 #endif
+#if defined(__powerpc__)
+# define MTERP_NO_UNALIGN_64
+#endif
 #if defined(HAVE_SHORT_ENUMS)
 # define MTERP_SMALL_ENUM   1
 #else

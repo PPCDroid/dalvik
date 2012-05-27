@@ -188,6 +188,9 @@ int64_t dvmQuasiAtomicRead64(volatile const int64_t* addr)
 #elif __sh__
 #define NEED_QUASIATOMICS 1
 
+#elif __powerpc
+#define NEED_QUASIATOMICS 1
+
 #else
 #error "Unsupported atomic operations for this platform"
 #endif

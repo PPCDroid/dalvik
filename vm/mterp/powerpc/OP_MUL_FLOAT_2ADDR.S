@@ -1,0 +1,2 @@
+%verify "executed"
+%include "powerpc/binop2addr-float.S" {"instr":"fmuls	f1, f1, f2"}
