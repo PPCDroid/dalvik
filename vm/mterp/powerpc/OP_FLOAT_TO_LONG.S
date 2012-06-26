@@ -17,6 +17,7 @@
 	beq-	.L${opcode}_store_min_int	/* ==, store */
 #else
 	fcmpu	cr0, f1, fMaxLong		/* compare f1 with max long */
+	bun-	.L${opcode}_store_zero		/* f1 is NaN */
 	bgt-	.L${opcode}_store_max_int	/* >, store */
 	beq-	.L${opcode}_store_max_int	/* ==, store */
 	fcmpu	cr0, f1, fMinLong		/* compare f1 with min long */
