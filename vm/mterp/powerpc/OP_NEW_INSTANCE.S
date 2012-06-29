@@ -32,9 +32,6 @@
 	cmpwi	r4, CLASS_INITIALIZED		/* has class been initialized? */
 	bne-	.L${opcode}_needinit		/* no, init class now */
 .L${opcode}_initialized:			/* r3=class */
-	lwz	r6, offClassObject_accessFlags(r3)	/* r6<- clazz->accessFlags */
-	andi.	r6, r6, ACC_INTERFACE|ACC_ABSTRACT	/* abstract or interface? */
-	bne-	.L${opcode}_abstract		/* fail */
 						/* finish */
 	li	r4, ALLOC_DONT_TRACK		/* flags for alloc call */
 	bl	dvmAllocObject@plt		/* r3<- new object */
@@ -59,16 +56,3 @@
 	mr	r3, r19				/* restore r3 */
 	bne+	.L${opcode}_initialized		/* success, continue */
 	b	common_exceptionThrown		/* failed, deal with init exception */
-
-	/*
-	 * We can't instantiate an abstract class or interface, so throw an
-	 * InstantiationError with the class descriptor as the message.
-	 *
-	 *  r3 holds class object
-	 */
-.L${opcode}_abstract:
-	lis	r3, .LstrInstantiationError@ha
-	addi	r3, r3, .LstrInstantiationError@l
-	lwz	r4, offClassObject_descriptor(r3)
-	bl	dvmThrowExceptionWithClassMessage@plt
-	b	common_exceptionThrown
