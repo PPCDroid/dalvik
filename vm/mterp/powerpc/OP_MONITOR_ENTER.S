@@ -8,9 +8,7 @@
 	GET_VREG_S(r4, r19)			/* r4<- vAA (object) */
 	lwz	r3, offGlue_self(rGLUE)		/* r3<- glue->self */
 	cmpwi	r4, 0				/* null object? */
-#ifdef WITH_MONITOR_TRACKING
-	EXPORT_PC()				/* export PC so we can grab stack trace */
-#endif
+	EXPORT_PC()				/* need for precise GC, MONITOR_TRACKING */
 	beq-	common_errNullObject		/* null object, throw an exception */
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 	bl	dvmLockObject@plt		/* call(self, obj) */

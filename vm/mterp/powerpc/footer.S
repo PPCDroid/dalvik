@@ -53,7 +53,7 @@ common_periodicChecks:
 #endif
 
 	/* suspend pending? */
-	cmpwi	r10, 0					/* yes, check suspend */
+	cmpwi	r10, 0					/* yes, do full suspension check */
 	bne	2f
 
 #if defined(WITH_DEBUGGER) || defined(WITH_PROFILER)
@@ -71,6 +71,7 @@ common_periodicChecks:
 	blr						/*  nothing to do, return */
 
 2:	lwz	r3, offGlue_self(rGLUE)			/* check suspend */
+	EXPORT_PC()					/* needed for precise GC */
 	b	dvmCheckSuspendPending@plt
 
 3:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
