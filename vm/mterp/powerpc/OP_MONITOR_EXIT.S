@@ -13,11 +13,13 @@
 	EXPORT_PC()				/* before fetch: export the PC */
 	GET_VREG_S(r4, r19)			/* r4<- vAA (object) */
 	cmpwi	r4, 0				/* null object? */
-	beq-	common_errNullObject		/* null object, throw an exception */
+	beq-	1f
 	lwz	r3, offGlue_self(rGLUE)		/* r3<- glue->self */
 	bl	dvmUnlockObject@plt		/* call(self, obj) */
 	cmpwi	r3, 0				/* failed? */
-	beq-	common_exceptionThrown		/* yes, exception is pending */
 	FETCH_ADVANCE_INST(1)			/* before throw: advance rPC, load rINST */
+	beq-	common_exceptionThrown		/* yes, exception is pending */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
-
+1:
+	FETCH_ADVANCE_INST(1)			/* advance before throw */
+	beq-	common_errNullObject
