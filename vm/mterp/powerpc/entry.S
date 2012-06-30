@@ -99,7 +99,7 @@ dvmMterpStdRun:
 	/* set up "named" registers, figure out entry point */
 	mr	rGLUE, r3			/* move r3 to glue */
 
-	lbz	r3, offGlue_entryPoint(rGLUE)	/* r3 is now InterpEntry */
+	lwz	r3, offGlue_entryPoint(rGLUE)	/* r3 is now InterpEntry */
 	LOAD_PC_FP_FROM_GLUE()			/* setup rGLUE */
 #ifdef KEEP_RES_FIELDS_IN_REGS
 	lwz	rResStr, offGlue_methodClassDex(rGLUE)
