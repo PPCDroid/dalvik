@@ -14,13 +14,13 @@
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
