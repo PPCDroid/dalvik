@@ -263,6 +263,7 @@ dalvik_mterp:
 	GET_INST_OPCODE_GOTO(r0)			/* extract opcode from rINST */
 
 .LstackOverflow:
+	mr	r4, r3					/* r4<- methodToCall */
 	lwz	r3, offGlue_self(rGLUE)			/* r3<- self */
 	bl	dvmHandleStackOverflow@plt
 	b	common_exceptionThrown
