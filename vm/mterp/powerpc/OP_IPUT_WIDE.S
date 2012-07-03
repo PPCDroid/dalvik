@@ -34,8 +34,8 @@
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 
-	lwzux	r3, r19, rFP			/* fp[A]<- r0 (hi) */
-	lwz	r4, 4(r19)			/* lo */
-	stwux	r3, r20, r5			/* r4<- obj.field (8/16/32 bits) */
-	stw	r4, 4(r2)
+	lwzux	r3, r19, rFP			/* r3<-fp[A] (hi) */
+	lwz	r5, 4(r19)			/* lo */
+	stwux	r3, r20, r4			/* obj.field(64 bits) <- r3 (hi)  */
+	stw	r5, 4(r20)			/* lo */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
