@@ -106,8 +106,10 @@ common_invokeMethodRange:
 	/* prepare to copy args to "outs" area of current frame */
 	srwi	r5, rINST, 8
 	SAVEAREA_FROM_FP(r11, rFP)		/* r11<- stack save area */
+	FETCH(r4, 2)				/* r4<- CCCC, (load here to hide latency) */
+	lhz	r7, offMethod_registersSize(r3)		/* r7<- methodToCall->regsSize */
+	lhz	r8, offMethod_outsSize(r3)		/* r8<- methodToCall->outsSize */
 	beq	.LinvokeArgsDone                /* if no args, skip the rest */
-	FETCH(r4, 2)				/* r4<- CCCC */
 
 	/* r3=methodToCall, r4=CCCC, r5=count, r11=outs */
 	/* (very few methods have > 10 args; could unroll for common cases) */
@@ -135,17 +137,19 @@ common_invokeMethodNoRange:
 	SAVEAREA_FROM_FP(r11, rFP)		/* r11<- stack save area */
 	srwi	r5, rINST, 12			/* r5<- B (arg count) -- test for zero */
 	cmpwi	r5, 0
-	beq	.LinvokeArgsDone		/* if no args, skip the rest */
-	FETCH(r4, 2)				/* r4<- GFED */
+	FETCH(r4, 2)				/* r4<- GFED, (load here to hide latency) */
+	lhz	r7, offMethod_registersSize(r3)		/* r5<- methodToCall->regsSize */
+	lhz	r8, offMethod_outsSize(r3)		/* r6<- methodToCall->outsSize */
+	beq	.LinvokeArgsDone
 
-	/* r3=methodToCall, r4=GFED, r5=count, r11=outs */
+	/* r3=methodToCall, r4=GFED, r5=count, r7=regSize, r8=outSize, r11=outs */
 .LinvokeNonRange:
 	subfic	r5, r5, 5			/* r5<- 5-r5 */
 	lis	r6, 5f@ha			/* r6<- start of insn block */
 	addi	r6, r6, 5f@l
 	slwi	r5, r5, 4			/* 4 insn  */
-	add	r7, r6, r5			/* r6 first insn of case */
-	mtctr	r7				/* move r6 to ctr */
+	add	r9, r6, r5			/* r9 first insn of case */
+	mtctr	r9				/* move r9 to ctr */
 	bctr					/* perform computed goto */
 
 5:	rlwinm	r6, rINST, 26, 26, 29		/* r6 = (rINST & 0x0f00) >> 6 */
@@ -175,24 +179,23 @@ common_invokeMethodNoRange:
 
 0:	/* fall through to .LinvokeArgsDone */
 
-.LinvokeArgsDone:	/* r3=methodToCall */
+.LinvokeArgsDone:	/* r3=methodToCall, r7=regsSize, r8=outsSize  */
+	lwz	rINST, offMethod_insns(r3)		/* rINST<- method->insns */
+	lwz	r9, offMethod_clazz(r3)			/* r9 <- method->clazz */
+
 	/* find space for the new stack frame, check for overflow */
 	SAVEAREA_FROM_FP(r4, rFP)			/* r4<- stack save area */
-	lhz	r5, offMethod_registersSize(r3)		/* r5<- methodToCall->regsSize */
-	slwi	r5, r5, 2				/* r5 *= 4 */
+	slwi	r5, r7, 2				/* r5 = regsSize << 2 */
 	sub	r4, r4, r5				/* r4<- newFp (old savearea - regsSize) */
 	SAVEAREA_FROM_FP(r11, r4)			/* r11<- newSaveArea */
 	lwz	r5, offGlue_interpStackEnd(rGLUE)	/* r5<- interpStackEnd */
-	lhz	r6, offMethod_outsSize(r3)		/* r6<- methodToCall->outsSize */
-	slwi	r6, r6, 2				/* r6 *= 4 */
+	slwi	r6, r8, 2				/* r6 = outsSize << 2 */
 	sub	r6, r11, r6				/* r6<- bottom (newsave - outsSize) */
 
 	cmpw	r6, r5					/* bottom < interpStackEnd? */
-	bgt-	0f					/* no, this frame will not overflow stack */
-	lhz	r7, offMethod_registersSize(r3)		/* r5<- methodToCall->regsSize */
-	lhz	r8, offMethod_outsSize(r3)		/* r6<- methodToCall->outsSize */
-	b	.LstackOverflow				/* yes, this frame will overflow stack */
-0:
+	lwz	r6, offMethod_accessFlags(r3)		/* r6<- methodToCall->accessFlags */
+	blt-	.LstackOverflow				/* yes, this frame will overflow stack */
+
 	/* set up newSaveArea */
 #ifdef EASY_GDB
 	SAVEAREA_FROM_FP(r10, rFP)			/* r10<- stack save area */
@@ -202,18 +205,17 @@ common_invokeMethodNoRange:
 	stw	rPC, offStackSaveArea_savedPc(r11)
 	stw	r3, offStackSaveArea_method(r11)
 
-	lwz	r6, offMethod_accessFlags(r3)		/* r6<- methodToCall->accessFlags */
 	andi.	r6, r6, ACC_NATIVE
 	bne	.LinvokeNative
 
-	/* Update "glue" values for the new method */
-	/* r3=methodToCall, r4=newFp */
-	lwz	r6, offMethod_clazz(r3)			/* r6<- method->clazz */
-	stw	r3, offGlue_method(rGLUE)		/* glue->method = methodToCall */
-	lwz	r6, offClassObject_pDvmDex(r6)		/* r6<- method->clazz->pDvmDex */
-	lwz	rPC, offMethod_insns(r3)		/* rPC<- method->insns */
-	stw	r6, offGlue_methodClassDex(rGLUE)	/* glue->methodClassDex = ... */
+	lwz	r6, offClassObject_pDvmDex(r9)		/* r6<- method->clazz->pDvmDex */
+	mr	rPC, rINST				/* publish new rPC */
 	lwz	r5, offGlue_self(rGLUE)			/* r5<- glue->self */
+
+	/* Update "glue" values for the new method */
+	/* r3=methodToCall, r4=newFp, r5=self, r6=newMethodClass */
+	stw	r3, offGlue_method(rGLUE)		/* glue->method = methodToCall */
+	stw	r6, offGlue_methodClassDex(rGLUE)	/* glue->methodClassDex = ... */
 	mr	rFP, r4					/* fp = newFp */
 	stw	r4, offThread_curFrame(r5)		/* self->curFrame = newFp */
 #ifdef KEEP_RES_FIELDS_IN_REGS
@@ -287,16 +289,16 @@ common_returnFromMethod:
 	lwz	rFP, offStackSaveArea_prevFrame(r3)	/* fp = saveArea->prevFrame */
 	lwz	r5, (offStackSaveArea_method - sizeofStackSaveArea)(rFP)
 							/* r5<- method we're returning to */
-	li	r4, 0					/* "want switch" = false */
+	lwz	r6, offGlue_self(rGLUE)			/* r6<- glue->self */
 	cmpwi	r5, 0					/* is this a break frame? */
+	li	r4, 0					/* "want switch" = false */
 	beq-	common_gotoBail				/* break frame, bail out completely */
+	lwz	r4, offMethod_clazz(r5)			/* r4<- method->clazz */
 
 	lwz	rPC, offStackSaveArea_savedPc(r3)	/* pc = saveArea->savedPc */
-	lwz	r6, offGlue_self(rGLUE)			/* r6<- glue->self */
 	stw	r5, offGlue_method(rGLUE)		/* glue->method = newSave->method */
-	stw	rFP, offThread_curFrame(r6)		/* self->curFrame = fp */
-	lwz	r4, offMethod_clazz(r5)			/* r4<- method->clazz */
 	lwz	r4, offClassObject_pDvmDex(r4)		/* r4<- method->clazz->pDvmDex */
+	stw	rFP, offThread_curFrame(r6)		/* self->curFrame = fp */
 	stw	r4, offGlue_methodClassDex(rGLUE)
 #ifdef KEEP_RES_FIELDS_IN_REGS
 	lwz	rResStr, offGlue_methodClassDex(rGLUE)
