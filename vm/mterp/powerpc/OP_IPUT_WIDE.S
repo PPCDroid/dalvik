@@ -1,3 +1,4 @@
+%default {"volatile":"0"}
 %verify "executed"
 %verify "null object"
 %verify "field already resolved"
@@ -31,11 +32,16 @@
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	cmpwi	r20, 0				/* check object for null */
 	beq-	common_errNullObject		/* object was null */
-	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
+	lwz	r5, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 
 	lwzux	r3, r19, rFP			/* r3<-fp[A] (hi) */
-	lwz	r5, 4(r19)			/* lo */
-	stwux	r3, r20, r4			/* obj.field(64 bits) <- r3 (hi)  */
-	stw	r5, 4(r20)			/* lo */
+	lwz	r4, 4(r19)			/* lo */
+	.if $volatile
+	add	r5, r20, r5
+	bl	dvmQuasiAtomicSwap64@plt
+	.else
+	stwux	r3, r20, r5			/* obj.field(64 bits) <- r3 (hi)  */
+	stw	r4, 4(r20)			/* lo */
+	.endif
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */

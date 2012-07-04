@@ -1,3 +1,4 @@
+%default {"volatile":"0"}
 %verify "executed"
 %verify "field already resolved"
 %verify "field not yet resolved"
@@ -21,9 +22,18 @@
 	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
-0:	lwz	r4, offStaticField_value(r3)	/* r4<- byte offset of field */
-	lwz	r5, offStaticField_value+4(r3)	/* r5 */
+0:	
+	.if	$volatile
+	addi	r3, r3, offStaticField_value
+	bl	dvmQuasiAtomicRead64@plt
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	stwux	r3, r19, rFP			/* fp[A]<- r3 */
+	stw	r4, 4(r19)
+	.else
+	lwz	r4, offStaticField_value(r3)
+	lwz	r5, offStaticField_value+4(r3)
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	stwux	r4, r19, rFP			/* fp[A]<- r3 */
 	stw	r5, 4(r19)
+	.endif
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */

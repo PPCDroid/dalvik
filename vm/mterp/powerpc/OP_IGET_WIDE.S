@@ -1,3 +1,4 @@
+%default {"volatile":"0"}
 %verify "executed"
 %verify "null object"
 %verify "field already resolved"
@@ -32,8 +33,13 @@
 0:	cmpwi	r20, 0				/* check object for null */
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
+	.if	$volatile
+	add	r3, r20, r3
+	bl	dvmQuasiAtomicRead64@plt
+	.else
 	lwzux	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
 	lwz	r4, 4(r20)			/* r4 (lo) */
+	.endif
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	stwux	r3, r19, rFP			/* fp[A]<- r3 (hi) */
 	stw	r4, 4(r19)			/* <- r4 (lo) */
