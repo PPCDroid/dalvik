@@ -1,17 +1,19 @@
 %verify "executed"
 %verify "exception handled"
 	/*
-	 * Execute a "native inline" instruction.
+	 * Execute a "native inline" instruction, using "/range" semantics.
+	 * Same idea as execute-inline, but we get the args differently.
 	 *
 	 * We need to call:
 	 *  bool (func)(u4 arg0, u4 arg1, u4 arg2, u4 arg3, JValue* pResult)
 	 */
-	/* [opt] execute-inline vAA, {vC, vD, vE, vF}, inline@BBBB */
+	/* [opt] execute-inline/range {vCCCC..v(CCCC+AA-1)}, inline@BBBB */
 	FETCH(r19, 1)				/* r19<- BBBB */
-	FETCH(r20, 2)				/* r20<- FEDC */
+	FETCH(r20, 2)				/* r20<- CCCC */
 	EXPORT_PC()				/* can throw */
-	srwi	r3, rINST, 12			/* r3<- B */
+	srwi	r3, rINST, 8			/* r3<- AA */
 	subfic	r3, r3, 4			/* r3<- 4-r3 */
+	slwi	r20, r20, 2			/* r20<- CCCC << 2 = vBase */
 	lis	r6, .L${opcode}_continue@ha	/* r6<- start of insn block */
 	addi	r6, r6, .L${opcode}_continue@l
 	slwi	r3, r3, 3			/* 2 insn  */
@@ -26,14 +28,14 @@
 %break
 
 .L${opcode}_continue:
-4:	rlwinm	r6, r20, 22, 26, 29		/* r6 = (FEDC & 0xf000) >> 10 */
-	lwzx	r6, rFP, r5			/* r6<- vF (shift right 12, left 2) */
-3:	rlwinm	r5, r20, 26, 26, 29		/* r6 = (FEDC & 0x0f00) >> 6) */
-	lwzx	r5, rFP, r5			/* r6<- vE (shift right 8, left 2) */
-2:	rlwinm	r4, r20, 30, 26, 29		/* r6 = (FEDC & 0x00f0) >> 2) */
-	lwzx	r4, rFP, r4			/* r6<- vD (shift right 4, left 2) */
-1:	rlwinm	r3, r20, 2, 26, 29		/* r6 = (FEDC & 0x000f) << 2) */
-	lwzx	r3, rFP, r3			/* r6<- vC (shift right 0, left 2) */
+4:	addi	r7, r20, 12			/* base + 3 << 2 */
+	lwzx	r6, rFP, r7			/* r6<- vBase[3] */
+3:	addi	r7, r20, 8			/* base + 2 << 2 */
+	lwzx	r4, rFP, r7			/* r5<- vBase[2] */
+2:	addi	r7, r20, 4			/* base + 1 << 2 */
+	lwzx	r4, rFP, r7			/* r4<- vBase[1] */
+1:	addi	r7, r20, 0			/* base + 0 << 2 */
+	lwzx	r3, rFP, r7			/* r3<- vBase[0] */
 
 	lis	r8, gDvmInlineOpsTable@ha	/* point to Inline OpsTable */
 	addi	r8, r8, gDvmInlineOpsTable@l
