@@ -22,56 +22,54 @@ common_backwardBranch:
 
 /*
  * Need to see if the thread needs to be suspended or debugger/profiler
- * activity has begun.
+ * activity has begun.  If so, we suspend the thread or side-exit to
+ * the debug interpreter as appropriate.
  *
- * TODO: if JDWP isn't running, zero out pDebuggerActive pointer so we don't
- * have to do the second ld.
+ * The common case is no activity on any of these, so we want to figure
+ * that out quickly.  If something is up, we can then sort out what.
+ *
+ * We want to be fast if the VM was built without debugger or profiler
+ * support, but we also need to recognize that the system is usually
+ * shipped with both of these enabled.
  *
  * TODO: reduce this so we're just checking a single location.
  *
  * On entry:
- *  r3 is reentry type, e.g. kInterpEntryInstr
+ *  r3 is reentry type, e.g. kInterpEntryInstr (for debugger/profiling)
  *  r11 is trampoline PC adjustment *in bytes*
  */
 common_periodicChecks:
 	lwz	r10, offGlue_pSelfSuspendCount(rGLUE)	/* r10<- &suspendCount */
-
-	/* speculatively store r0 before it is clobbered by dvmCheckSuspendPending */
-	stw     r3, offGlue_entryPoint(rGLUE)
-
-#if defined(WITH_DEBUGGER)
 	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
-#endif
-#if defined(WITH_PROFILER)
 	lwz	r8, offGlue_pActiveProfilers(rGLUE)	/* r8<- &activeProfilers */
-#endif
 
-	lwz	r10, 0(r10)				/* r10<- suspendCount (int) */
+	lwz	r7, 0(r10)				/* r7<- suspendCount (int) */
+	cmpwi	r7, 0
+	bne	1f
 
-#if defined(WITH_DEBUGGER)
+	cmpwi	r9, 0					/* debugger enabled ? */
+	beq+ 0f
 	lwz	r9, 0(r9)				/* r9<- debuggerActive (boolean) */
-#endif
-#if defined (WITH_PROFILER)
-	lwz     r8, 0(r8)				/* r8<- activeProfilers (int) */
-#endif
+	cmpwi	r9, 0
+	bne	1f
 
-	/* suspend pending? */
-	cmpwi	r10, 0					/* yes, do full suspension check */
-	bne	2f
-
-#if defined(WITH_DEBUGGER) || defined(WITH_PROFILER)
-# if defined(WITH_DEBUGGER) && defined(WITH_PROFILER)
-	or	r9, r9, r8				/* debugger attached or profiler started? */
-	cmpwi	r9, 0					/* yes, check suspend */
-# elif defined(WITH_DEBUGGER)
-	cmpwi	r9, 0					/* yes, check suspend */
-# elif defined(WITH_PROFILER)
-	cmpwi	r8, 0					/*  profiler started? */
-# endif
-	bne	3f					/*  debugger/profiler, switch interp */
-#endif
+0:	lwz     r8, 0(r8)				/* r8<- activeProfilers (int) */
+	cmpwi	r8, 0
+	bne	1f
 
 	blr						/*  nothing to do, return */
+
+1:
+	/*
+	 * One or more interesting events have happened.  Figure out what.
+	 *
+	 * If debugging or profiling are compiled in, we need to disambiguate.
+	 *
+	 * r3 still holds the reentry type.
+	 */
+	lwz	r7, 0(r10)				/* r7<- suspendCount (int) */
+	cmpwi	r7, 0					/* want suspend? */
+	beq	2f
 
 	/* preserve r3, r11 and lr */
 	mflr	r19
@@ -84,9 +82,33 @@ common_periodicChecks:
 	mr	r3, r20
 	mtlr	r19
 
-3:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
+	/*
+	 * Reload the debugger/profiler enable flags.  We're checking to see
+	 * if either of these got set while we were suspended.
+	 *
+	 * We can't really avoid the #ifdefs here, because the fields don't
+	 * exist when the feature is disabled.
+	 */
+2:	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
+	cmpwi	r9, 0					/* debugger enabled? */
+	beq	0f
+	lwz	r9, 0(r9)				/* yes, r9<- debuggerActive (boolean) */
+	cmpwi	r9, 0
+	bne	1f
+
+0:
+	lwz	r8, offGlue_pActiveProfilers(rGLUE)	/* r8<- &activeProfilers */
+	lwz	r8, 0(r8)				/* r2<- activeProfilers (int) */
+	cmpwi	r8, 0
+	beq	3f
+
+1:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
+	stw	r3, offGlue_entryPoint(rGLUE)		/* store r3, need for debug/prof */
 	li      r4, 1                      		/* "want switch" = true */
-	b       common_gotoBail
+	b       common_gotoBail				/* side exit */
+
+3:
+	blr						/* nothing to do, return */
 
 /*
  * The equivalent of "goto bail", this calls through the "bail handler".
