@@ -73,9 +73,16 @@ common_periodicChecks:
 
 	blr						/*  nothing to do, return */
 
-2:	lwz	r3, offGlue_self(rGLUE)			/* check suspend */
+	/* preserve r3, r11 and lr */
+	mflr	r19
+	mr	r20, r3
+	mr	r21, r11
+	lwz	r3, offGlue_self(rGLUE)			/* check suspend */
 	EXPORT_PC()					/* needed for precise GC */
-	b	dvmCheckSuspendPending@plt
+	bl	dvmCheckSuspendPending@plt		/* do full check, suspend if necessary */
+	mr	r11, r21
+	mr	r3, r20
+	mtlr	r19
 
 3:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
 	li      r4, 1                      		/* "want switch" = true */
