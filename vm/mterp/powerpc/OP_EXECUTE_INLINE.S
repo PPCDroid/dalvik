@@ -27,7 +27,7 @@
 
 .L${opcode}_continue:
 4:	rlwinm	r6, r20, 22, 26, 29		/* r6 = (FEDC & 0xf000) >> 10 */
-	lwzx	r6, rFP, r5			/* r6<- vF (shift right 12, left 2) */
+	lwzx	r6, rFP, r6			/* r6<- vF (shift right 12, left 2) */
 3:	rlwinm	r5, r20, 26, 26, 29		/* r6 = (FEDC & 0x0f00) >> 6) */
 	lwzx	r5, rFP, r5			/* r6<- vE (shift right 8, left 2) */
 2:	rlwinm	r4, r20, 30, 26, 29		/* r6 = (FEDC & 0x00f0) >> 2) */
