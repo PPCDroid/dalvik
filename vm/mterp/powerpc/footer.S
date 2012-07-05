@@ -49,7 +49,7 @@ common_periodicChecks:
 
 	cmpwi	r9, 0					/* debugger enabled ? */
 	beq+ 0f
-	lwz	r9, 0(r9)				/* r9<- debuggerActive (boolean) */
+	lbz	r9, 0(r9)				/* r9<- debuggerActive (boolean) */
 	cmpwi	r9, 0
 	bne	1f
 
@@ -92,7 +92,7 @@ common_periodicChecks:
 2:	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
 	cmpwi	r9, 0					/* debugger enabled? */
 	beq	0f
-	lwz	r9, 0(r9)				/* yes, r9<- debuggerActive (boolean) */
+	lbz	r9, 0(r9)				/* yes, r9<- debuggerActive (boolean) */
 	cmpwi	r9, 0
 	bne	1f
 
