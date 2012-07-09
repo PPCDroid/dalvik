@@ -8,7 +8,8 @@
 	 */
 	/* goto +AA */
 	slwi	r3, rINST, 16			/* r3<- AAxx0000 */
-	srawi.	r11, r3, 23			/* r11<- ssssssAA (sign-extended) << 1 */
-	blt-	common_backwardBranch		/* backward branch, do periodic checks */
+	srawi	r11, r3, 24			/* r11<- ssssssAA (sign-extended) */
+	slwi.	r11, r11, 1			/* r11<- byte offset */
+	ble+	common_backwardBranch		/* backward branch, do periodic checks */
 	FETCH_ADVANCE_INST_RB(r11)		/* update rPC, load rINST */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
