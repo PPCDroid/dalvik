@@ -45,10 +45,11 @@ common_periodicChecks:
 
 	lwz	r7, 0(r10)				/* r7<- suspendCount (int) */
 	cmpwi	r7, 0
-	bne	1f
+	bne	3f
 
+2:
 	cmpwi	r9, 0					/* debugger enabled ? */
-	beq+ 0f
+	beq	0f
 	lbz	r9, 0(r9)				/* r9<- debuggerActive (boolean) */
 	cmpwi	r9, 0
 	bne	1f
@@ -59,7 +60,6 @@ common_periodicChecks:
 
 	blr						/*  nothing to do, return */
 
-1:
 	/*
 	 * One or more interesting events have happened.  Figure out what.
 	 *
@@ -67,10 +67,7 @@ common_periodicChecks:
 	 *
 	 * r3 still holds the reentry type.
 	 */
-	lwz	r7, 0(r10)				/* r7<- suspendCount (int) */
-	cmpwi	r7, 0					/* want suspend? */
-	beq	2f
-
+3:
 	/* preserve r3, r11 and lr */
 	mflr	r19
 	mr	r20, r3
@@ -89,26 +86,15 @@ common_periodicChecks:
 	 * We can't really avoid the #ifdefs here, because the fields don't
 	 * exist when the feature is disabled.
 	 */
-2:	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
-	cmpwi	r9, 0					/* debugger enabled? */
-	beq	0f
-	lbz	r9, 0(r9)				/* yes, r9<- debuggerActive (boolean) */
-	cmpwi	r9, 0
-	bne	1f
-
-0:
+	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
 	lwz	r8, offGlue_pActiveProfilers(rGLUE)	/* r8<- &activeProfilers */
-	lwz	r8, 0(r8)				/* r2<- activeProfilers (int) */
-	cmpwi	r8, 0
-	beq	3f
+
+	b 2b
 
 1:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
 	stw	r3, offGlue_entryPoint(rGLUE)		/* store r3, need for debug/prof */
 	li      r4, 1                      		/* "want switch" = true */
 	b       common_gotoBail				/* side exit */
-
-3:
-	blr						/* nothing to do, return */
 
 /*
  * The equivalent of "goto bail", this calls through the "bail handler".
