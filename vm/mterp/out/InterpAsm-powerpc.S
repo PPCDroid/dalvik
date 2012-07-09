@@ -372,6 +372,11 @@ dvmMterpStdRun:
 	stw	r24, 124(r1)	/* r24 */
 	stw	r25, 128(r1)	/* r25 */
 	stw	r26, 132(r1)	/* r26 */
+	stw	r27, 136(r1)	/* r27 */
+	stw	r28, 140(r1)	/* r28 */
+	stw	r29, 144(r1)	/* r29 */
+	stw	r30, 148(r1)	/* r30 */
+	stw	r31, 152(r1)	/* r31 */
 
 	/* save stack pointer for later return. */
 	stw	r1, offGlue_bailPtr(r3)
@@ -399,7 +404,7 @@ dvmMterpStdRun:
 	/* set up "named" registers, figure out entry point */
 	mr	rGLUE, r3			/* move r3 to glue */
 
-	lbz	r3, offGlue_entryPoint(rGLUE)	/* r3 is now InterpEntry */
+	lwz	r3, offGlue_entryPoint(rGLUE)	/* r3 is now InterpEntry */
 	LOAD_PC_FP_FROM_GLUE()			/* setup rGLUE */
 #ifdef KEEP_RES_FIELDS_IN_REGS
 	lwz	rResStr, offGlue_methodClassDex(rGLUE)
@@ -449,6 +454,11 @@ dvmMterpStdRun:
 dvmMterpStdBail:
 	lwz	r1, offGlue_bailPtr(r3)
 
+	lwz	r31, 152(r1)	/* r31 */
+	lwz	r30, 148(r1)	/* r30 */
+	lwz	r29, 144(r1)	/* r29 */
+	lwz	r28, 140(r1)	/* r28 */
+	lwz	r27, 136(r1)	/* r27 */
 	lwz	r26, 132(r1)	/* r26 */
 	lwz	r25, 128(r1)	/* r25 */
 	lwz	r24, 124(r1)	/* r24 */
@@ -592,7 +602,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	add     r5, rFP, r5			/* r5<- &fp[A] */
 	lwz	r3, 0(r6)			/* r3/r4<- fp[B] */
 	lwz	r4, 4(r6)
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	FETCH_ADVANCE_INST(3)			/* advance rPC, load rINST */
 	stw	r3, 0(r5)			/* fp[A]<- r3/r4 */
 	stw	r4, 4(r5)
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & exec */
@@ -970,9 +980,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_S(r4, r19)			/* r4<- vAA (object) */
 	lwz	r3, offGlue_self(rGLUE)		/* r3<- glue->self */
 	cmpwi	r4, 0				/* null object? */
-#ifdef WITH_MONITOR_TRACKING
-	EXPORT_PC()				/* export PC so we can grab stack trace */
-#endif
+	EXPORT_PC()				/* need for precise GC, MONITOR_TRACKING */
 	beq-	common_errNullObject		/* null object, throw an exception */
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 	bl	dvmLockObject@plt		/* call(self, obj) */
@@ -1000,14 +1008,16 @@ dvmAsmInstructionStart = .L_OP_NOP
 	EXPORT_PC()				/* before fetch: export the PC */
 	GET_VREG_S(r4, r19)			/* r4<- vAA (object) */
 	cmpwi	r4, 0				/* null object? */
-	beq-	common_errNullObject		/* null object, throw an exception */
+	beq-	1f
 	lwz	r3, offGlue_self(rGLUE)		/* r3<- glue->self */
 	bl	dvmUnlockObject@plt		/* call(self, obj) */
 	cmpwi	r3, 0				/* failed? */
-	beq-	common_exceptionThrown		/* yes, exception is pending */
 	FETCH_ADVANCE_INST(1)			/* before throw: advance rPC, load rINST */
+	beq-	common_exceptionThrown		/* yes, exception is pending */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
-
+1:
+	FETCH_ADVANCE_INST(1)			/* advance before throw */
+	beq-	common_errNullObject
 
 /* ------------------------------ */
     .balign 128
@@ -1134,9 +1144,6 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r4, CLASS_INITIALIZED		/* has class been initialized? */
 	bne-	.LOP_NEW_INSTANCE_needinit		/* no, init class now */
 .LOP_NEW_INSTANCE_initialized:			/* r3=class */
-	lwz	r6, offClassObject_accessFlags(r3)	/* r6<- clazz->accessFlags */
-	andi.	r6, r6, ACC_INTERFACE|ACC_ABSTRACT	/* abstract or interface? */
-	bne-	.LOP_NEW_INSTANCE_abstract		/* fail */
 						/* finish */
 	li	r4, ALLOC_DONT_TRACK		/* flags for alloc call */
 	bl	dvmAllocObject@plt		/* r3<- new object */
@@ -1193,14 +1200,19 @@ dvmAsmInstructionStart = .L_OP_NOP
 	/*
 	* Create a new array with elements filled from registers.
 	*
-	* for: filled-new-array
+	* for: filled-new-array, filled-new-array/range
 	*/
 	/* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
+	/* op {vCCCC..v(CCCC+AA-1)}, type@BBBB */
 
+	.if	0
+	rlwinm  r20,rINST,24,24,31		/* r20<- AA */
+	.else
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r20,rINST,20,28,31		/* r20<- B */
-	FETCH(r4, 1)				/* r4<- BBBB */
-	slwi	r5, r4, 2			/* r5<- BBBB << 2 */
+	.endif
+	FETCH(r4, 1)				/* r4<- CCCC or BBBB */
+	slwi	r5, r4, 2			/* r5<- CCCC << 2 or BBBB << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r6<- pDvmDex */
 	lwz	r6, offDvmDex_pResClasses(r6)	/* r6<- pDvmDex->pResClasses */
@@ -1224,15 +1236,23 @@ dvmAsmInstructionStart = .L_OP_NOP
     .balign 128
 .L_OP_FILLED_NEW_ARRAY_RANGE: /* 0x25 */
 /* File: powerpc/OP_FILLED_NEW_ARRAY_RANGE.S */
+/* File: powerpc/OP_FILLED_NEW_ARRAY.S */
 	/*
 	* Create a new array with elements filled from registers.
 	*
-	* for: filled-new-array/range
+	* for: filled-new-array, filled-new-array/range
 	*/
+	/* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
 	/* op {vCCCC..v(CCCC+AA-1)}, type@BBBB */
-	rlwinm  r19,rINST,24,24,31		/* r19<- AA */
-	FETCH(r4, 1)				/* r4<- CCCC */
-	slwi	r5, r4, 2			/* r5<- CCCC << 2 */
+
+	.if	1
+	rlwinm  r20,rINST,24,24,31		/* r20<- AA */
+	.else
+	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
+	rlwinm  r20,rINST,20,28,31		/* r20<- B */
+	.endif
+	FETCH(r4, 1)				/* r4<- CCCC or BBBB */
+	slwi	r5, r4, 2			/* r5<- CCCC << 2 or BBBB << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r6<- pDvmDex */
 	lwz	r6, offDvmDex_pResClasses(r6)	/* r6<- pDvmDex->pResClasses */
@@ -1250,6 +1270,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r3, 0				/* got null? */
 	bne+    .LOP_FILLED_NEW_ARRAY_RANGE_continue		/* continue? */
 	b	common_exceptionThrown		/* no, handle exception */
+
 
 
 /* ------------------------------ */
@@ -1283,6 +1304,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r5,rINST,26,6,29		/* r5<- AA */
 	GET_VREG_S(r4, r5)			/* r4<- vAA (exception object) */
 	lwz	r3, offGlue_self(rGLUE)		/* r3<- glue->self */
+	EXPORT_PC()
 	cmpwi	r4, 0				/* null object? */
 	beq-	common_errNullObject		/* yes, throw an NPE instead */
 	/* bypass dvmSetException, just store it */
@@ -1301,8 +1323,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	 */
 	/* goto +AA */
 	slwi	r3, rINST, 16			/* r3<- AAxx0000 */
-	srawi.	r11, r3, 23			/* r11<- ssssssAA (sign-extended) << 1 */
-	blt-	common_backwardBranch		/* backward branch, do periodic checks */
+	srawi	r11, r3, 24			/* r11<- ssssssAA (sign-extended) */
+	slwi.	r11, r11, 1			/* r11<- byte offset */
+	ble+	common_backwardBranch		/* backward branch, do periodic checks */
 	FETCH_ADVANCE_INST_RB(r11)		/* update rPC, load rINST */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -1319,7 +1342,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	/* goto/16 +AAAA */
 	FETCH_S(r3, 1)				/* r3<- ssssAAAA (sign-extended) */
 	slwi.	r11, r3, 1			/* r11<- byte offset, check sign */
-	blt-	common_backwardBranch		/* backward branch, do periodic checks */
+	blt+	common_backwardBranch		/* backward branch, do periodic checks */
 	FETCH_ADVANCE_INST_RB(r11)		/* update rPC, load rINST */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & exec */
 
@@ -1779,12 +1802,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_IF_EQZ.S */
 /* File: powerpc/zcmp.S */
 	/*
-	* Generic one-operand compare-and-branch operation.  Provide a "revcmp"
-	* fragment that specifies the *reverse* comparison to perform, e.g.
-	* for "if-le" you would use "gt".
-	*
-	* for: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
-	*/
+	 * Generic one-operand compare-and-branch operation.  Provide a "revcmp"
+	 * fragment that specifies the *reverse* comparison to perform, e.g.
+	 * for "if-le" you would use "gt".
+	 *
+	 * For: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
+	 */
 	/* if-cmp vAA, +BBBB */
 	rlwinm	r3,rINST,26,6,29		/* r7<- AA << 2 */
 	GET_VREG_S(r5, r3)			/* r5<- vA */
@@ -1804,12 +1827,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_IF_NEZ.S */
 /* File: powerpc/zcmp.S */
 	/*
-	* Generic one-operand compare-and-branch operation.  Provide a "revcmp"
-	* fragment that specifies the *reverse* comparison to perform, e.g.
-	* for "if-le" you would use "gt".
-	*
-	* for: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
-	*/
+	 * Generic one-operand compare-and-branch operation.  Provide a "revcmp"
+	 * fragment that specifies the *reverse* comparison to perform, e.g.
+	 * for "if-le" you would use "gt".
+	 *
+	 * For: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
+	 */
 	/* if-cmp vAA, +BBBB */
 	rlwinm	r3,rINST,26,6,29		/* r7<- AA << 2 */
 	GET_VREG_S(r5, r3)			/* r5<- vA */
@@ -1829,12 +1852,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_IF_LTZ.S */
 /* File: powerpc/zcmp.S */
 	/*
-	* Generic one-operand compare-and-branch operation.  Provide a "revcmp"
-	* fragment that specifies the *reverse* comparison to perform, e.g.
-	* for "if-le" you would use "gt".
-	*
-	* for: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
-	*/
+	 * Generic one-operand compare-and-branch operation.  Provide a "revcmp"
+	 * fragment that specifies the *reverse* comparison to perform, e.g.
+	 * for "if-le" you would use "gt".
+	 *
+	 * For: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
+	 */
 	/* if-cmp vAA, +BBBB */
 	rlwinm	r3,rINST,26,6,29		/* r7<- AA << 2 */
 	GET_VREG_S(r5, r3)			/* r5<- vA */
@@ -1854,12 +1877,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_IF_GEZ.S */
 /* File: powerpc/zcmp.S */
 	/*
-	* Generic one-operand compare-and-branch operation.  Provide a "revcmp"
-	* fragment that specifies the *reverse* comparison to perform, e.g.
-	* for "if-le" you would use "gt".
-	*
-	* for: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
-	*/
+	 * Generic one-operand compare-and-branch operation.  Provide a "revcmp"
+	 * fragment that specifies the *reverse* comparison to perform, e.g.
+	 * for "if-le" you would use "gt".
+	 *
+	 * For: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
+	 */
 	/* if-cmp vAA, +BBBB */
 	rlwinm	r3,rINST,26,6,29		/* r7<- AA << 2 */
 	GET_VREG_S(r5, r3)			/* r5<- vA */
@@ -1879,12 +1902,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_IF_GTZ.S */
 /* File: powerpc/zcmp.S */
 	/*
-	* Generic one-operand compare-and-branch operation.  Provide a "revcmp"
-	* fragment that specifies the *reverse* comparison to perform, e.g.
-	* for "if-le" you would use "gt".
-	*
-	* for: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
-	*/
+	 * Generic one-operand compare-and-branch operation.  Provide a "revcmp"
+	 * fragment that specifies the *reverse* comparison to perform, e.g.
+	 * for "if-le" you would use "gt".
+	 *
+	 * For: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
+	 */
 	/* if-cmp vAA, +BBBB */
 	rlwinm	r3,rINST,26,6,29		/* r7<- AA << 2 */
 	GET_VREG_S(r5, r3)			/* r5<- vA */
@@ -1904,12 +1927,12 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_IF_LEZ.S */
 /* File: powerpc/zcmp.S */
 	/*
-	* Generic one-operand compare-and-branch operation.  Provide a "revcmp"
-	* fragment that specifies the *reverse* comparison to perform, e.g.
-	* for "if-le" you would use "gt".
-	*
-	* for: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
-	*/
+	 * Generic one-operand compare-and-branch operation.  Provide a "revcmp"
+	 * fragment that specifies the *reverse* comparison to perform, e.g.
+	 * for "if-le" you would use "gt".
+	 *
+	 * For: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
+	 */
 	/* if-cmp vAA, +BBBB */
 	rlwinm	r3,rINST,26,6,29		/* r7<- AA << 2 */
 	GET_VREG_S(r5, r3)			/* r5<- vA */
@@ -2311,31 +2334,23 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm	r6,r3,26,6,29			/* r6<- CC << 2 */
 	rlwinm  r5,r3,2,22,29			/* r5<- BB ( = andi ,,255) << 2 */
 	GET_VREG_S(r4, r6)			/* r4<- vCC (requested index) */
-	GET_VREG_S(r3, r5)			/* r3<- vBB */
+	GET_VREG_S(r21, r5)			/* r21<- vBB */
 
-	cmpwi	r3, 0				/* null array object? */
+	cmpwi	r21, 0				/* null array object? */
 	beq-	common_errNullObject		/* yes, bail */
-	lwz	r6, offArrayObject_length(r3)	/* r6<- arrayObj->length */
+	lwz	r6, offArrayObject_length(r21)	/* r6<- arrayObj->length */
 	cmplw	r4, r6				/* compare unsigned index, length */
 	bge-	common_errArrayIndex		/* index >= length, bail */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 
-	/* r3 = vBB, r4 = vCC, r19 = vAA << 2 */
+	/* r21 = vBB, r4 = vCC, r19 = vAA << 2 */
 	slwi	r4, r4, 2			/* r4<- index*width */
-	add     r20, r3, r4			/* r20<- arrayObj + index*width */
+	add     r20, r21, r4			/* r20<- arrayObj + index*width */
 	GET_VREG_S(r19, r19)			/* vAA<- r19 */
 
 	cmpwi	r19, 0				/* storing null reference? */
-	beq-	0f				/* yes, skip type checks */
-	lwz	r4, offObject_clazz(r3)		/* r4<- arrayObj->clazz */
-	lwz	r3, offObject_clazz(r19)	/* r3<- obj->clazz */
-	bl	dvmCanPutArrayElement@plt	/* test object type vs. array type */
-	cmpwi	r3, 0				/* okay? */
-	beq-	common_errArrayStore		/* no */
-0:
-	stw	r19, offArrayObject_contents(r20) /* r19<- vBB[vCC] */
-
-	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+	beq-	.LOP_APUT_OBJECT_skip_check		/* yes, skip type checks */
+	b .LOP_APUT_OBJECT_finish
 
 /* ------------------------------ */
     .balign 128
@@ -2487,13 +2502,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2507,6 +2522,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
 	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	/* no-op */				/* acquiring load */
 	.ifnb 
 						/* perform masking (if requested) */
 	.endif
@@ -2528,13 +2544,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2547,8 +2563,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 0:	cmpwi	r20, 0				/* check object for null */
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
+	.if	0
+	add	r3, r20, r3
+	bl	dvmQuasiAtomicRead64@plt
+	.else
 	lwzux	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
 	lwz	r4, 4(r20)			/* r4 (lo) */
+	.endif
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	stwux	r3, r19, rFP			/* fp[A]<- r3 (hi) */
 	stw	r4, 4(r19)			/* <- r4 (lo) */
@@ -2569,13 +2590,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2589,6 +2610,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
 	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	/* no-op */				/* acquiring load */
 	.ifnb 
 						/* perform masking (if requested) */
 	.endif
@@ -2612,13 +2634,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2632,6 +2654,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
 	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	/* no-op */				/* acquiring load */
 	.ifnb clrlwi	r3, r3, 24
 	clrlwi	r3, r3, 24					/* perform masking (if requested) */
 	.endif
@@ -2655,13 +2678,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2675,8 +2698,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
 	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
-	.ifnb clrlwi	r3, r3, 24
-	clrlwi	r3, r3, 24					/* perform masking (if requested) */
+	/* no-op */				/* acquiring load */
+	.ifnb extsb	r3, r3
+	extsb	r3, r3					/* perform masking (if requested) */
 	.endif
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	SET_VREG_S(r3, r19)			/* fp[A]<- r0 */
@@ -2698,13 +2722,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2718,6 +2742,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
 	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	/* no-op */				/* acquiring load */
 	.ifnb clrlwi	r3, r3, 16
 	clrlwi	r3, r3, 16					/* perform masking (if requested) */
 	.endif
@@ -2741,13 +2766,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2761,8 +2786,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
 	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
-	.ifnb clrlwi	r3, r3, 16
-	clrlwi	r3, r3, 16					/* perform masking (if requested) */
+	/* no-op */				/* acquiring load */
+	.ifnb extsh	r3, r3
+	extsh	r3, r3					/* perform masking (if requested) */
 	.endif
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	SET_VREG_S(r3, r19)			/* fp[A]<- r0 */
@@ -2776,20 +2802,20 @@ dvmAsmInstructionStart = .L_OP_NOP
 	/*
 	 * General 32-bit instance field get.
 	 *
-	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 * for: iput, iput-boolean, iput-byte, iput-char, iput-short
 	 */
 	/* op vA, vB, field@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2803,10 +2829,11 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	GET_VREG_S(r3, r19)			/* fp[A]<- r0 */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
 	.ifnb 
 						/* perform masking (if requested) */
 	.endif
+	/* no-op */				/* releasing store */
 	stwx	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -2824,13 +2851,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2842,37 +2869,41 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	cmpwi	r20, 0				/* check object for null */
 	beq-	common_errNullObject		/* object was null */
-	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
+	lwz	r5, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 
-	lwzux	r3, r19, rFP			/* fp[A]<- r0 (hi) */
+	lwzux	r3, r19, rFP			/* r3<-fp[A] (hi) */
 	lwz	r4, 4(r19)			/* lo */
-	stwux	r3, r20, r5			/* r4<- obj.field (8/16/32 bits) */
-	stw	r4, 4(r2)
+	.if 0
+	add	r5, r20, r5
+	bl	dvmQuasiAtomicSwap64@plt
+	.else
+	stwux	r3, r20, r5			/* obj.field(64 bits) <- r3 (hi)  */
+	stw	r4, 4(r20)			/* lo */
+	.endif
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
 /* ------------------------------ */
     .balign 128
 .L_OP_IPUT_OBJECT: /* 0x5b */
 /* File: powerpc/OP_IPUT_OBJECT.S */
-/* File: powerpc/OP_IPUT.S */
 	/*
-	 * General 32-bit instance field get.
+	 * Object field put
 	 *
-	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 * for: iput-object
 	 */
 	/* op vA, vB, field@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2886,13 +2917,16 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	GET_VREG_S(r3, r19)			/* fp[A]<- r0 */
-	.ifnb 
-						/* perform masking (if requested) */
-	.endif
-	stwx	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
+	/* no-op */
+	stwx	r3, r20, r4			/* obj.field (32 bits) <- r3 */
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r20, r20, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r3, 0				/* stored a null reference ? */
+	beq- 1f
+	stbx	r5, r5, r20			/* mark card if not zero */
+1:
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
-
 
 /* ------------------------------ */
     .balign 128
@@ -2902,20 +2936,20 @@ dvmAsmInstructionStart = .L_OP_NOP
 	/*
 	 * General 32-bit instance field get.
 	 *
-	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 * for: iput, iput-boolean, iput-byte, iput-char, iput-short
 	 */
 	/* op vA, vB, field@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2929,10 +2963,11 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	GET_VREG_S(r3, r19)			/* fp[A]<- r0 */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
 	.ifnb clrlwi	r3, r3, 24
 	clrlwi	r3, r3, 24					/* perform masking (if requested) */
 	.endif
+	/* no-op */				/* releasing store */
 	stwx	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -2945,20 +2980,20 @@ dvmAsmInstructionStart = .L_OP_NOP
 	/*
 	 * General 32-bit instance field get.
 	 *
-	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 * for: iput, iput-boolean, iput-byte, iput-char, iput-short
 	 */
 	/* op vA, vB, field@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -2972,10 +3007,11 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	GET_VREG_S(r3, r19)			/* fp[A]<- r0 */
-	.ifnb clrlwi	r3, r3, 24
-	clrlwi	r3, r3, 24					/* perform masking (if requested) */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
+	.ifnb extsb	r3, r3
+	extsb	r3, r3					/* perform masking (if requested) */
 	.endif
+	/* no-op */				/* releasing store */
 	stwx	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -2988,20 +3024,20 @@ dvmAsmInstructionStart = .L_OP_NOP
 	/*
 	 * General 32-bit instance field get.
 	 *
-	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 * for: iput, iput-boolean, iput-byte, iput-char, iput-short
 	 */
 	/* op vA, vB, field@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -3015,10 +3051,11 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	GET_VREG_S(r3, r19)			/* fp[A]<- r0 */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
 	.ifnb clrlwi	r3, r3, 16
 	clrlwi	r3, r3, 16					/* perform masking (if requested) */
 	.endif
+	/* no-op */				/* releasing store */
 	stwx	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -3031,20 +3068,20 @@ dvmAsmInstructionStart = .L_OP_NOP
 	/*
 	 * General 32-bit instance field get.
 	 *
-	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 * for: iput, iput-boolean, iput-byte, iput-char, iput-short
 	 */
 	/* op vA, vB, field@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
 	FETCH(r4, 1)				/* r4<- field ref CCCC */
 	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
-	slwi	r4, r4, 2			/* r4<- r4 << 2 */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
 #ifndef KEEP_RES_FIELDS_IN_REGS
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
 	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
-	lwzx	r3, r5, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
 #else
-	lwzx	r3, rResFld, r4			/* r3<- resolved InstField ptr */
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
 	cmpwi	r3, 0				/* is resolved entry null? */
 	bne+	0f				/* no, already resolved */
@@ -3058,10 +3095,11 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	GET_VREG_S(r3, r19)			/* fp[A]<- r0 */
-	.ifnb clrlwi	r3, r3, 16
-	clrlwi	r3, r3, 16					/* perform masking (if requested) */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
+	.ifnb extsh	r3, r3
+	extsh	r3, r3					/* perform masking (if requested) */
 	.endif
+	/* no-op */				/* releasing store */
 	stwx	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -3095,6 +3133,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	/* no-op */				/* acquiring load */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	.ifnb 
 	
@@ -3125,11 +3164,20 @@ dvmAsmInstructionStart = .L_OP_NOP
 	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
-0:	lwz	r4, offStaticField_value(r3)	/* r4<- byte offset of field */
-	lwz	r5, offStaticField_value+4(r3)	/* r5 */
+0:	
+	.if	0
+	addi	r3, r3, offStaticField_value
+	bl	dvmQuasiAtomicRead64@plt
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	stwux	r3, r19, rFP			/* fp[A]<- r3 */
+	stw	r4, 4(r19)
+	.else
+	lwz	r4, offStaticField_value(r3)
+	lwz	r5, offStaticField_value+4(r3)
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	stwux	r4, r19, rFP			/* fp[A]<- r3 */
 	stw	r5, 4(r19)
+	.endif
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
 /* ------------------------------ */
@@ -3162,6 +3210,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	/* no-op */				/* acquiring load */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	.ifnb 
 	
@@ -3200,6 +3249,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	/* no-op */				/* acquiring load */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	.ifnb clrlwi	r3, r3, 24
 	clrlwi	r3, r3, 24
@@ -3238,6 +3288,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	/* no-op */				/* acquiring load */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	.ifnb extsb	r3, r3
 	extsb	r3, r3
@@ -3276,6 +3327,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	/* no-op */				/* acquiring load */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	.ifnb clrlwi	r3, r3, 16
 	clrlwi	r3, r3, 16
@@ -3314,6 +3366,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	/* no-op */				/* acquiring load */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	.ifnb extsh	r3, r3
 	extsh	r3, r3
@@ -3327,9 +3380,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 .L_OP_SPUT: /* 0x67 */
 /* File: powerpc/OP_SPUT.S */
 	/*
-	 * General 32-bit SGET handler.
+	 * General 32-bit SPUT handler.
 	 *
-	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 * for: sput, sput-boolean, sput-byte, sput-char, sput-short
 	 */
 	/* op vAA, field@CCCC */
 	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
@@ -3355,6 +3408,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	.ifnb 
 	
 	.endif
+	/* no-op */				/* releasing store */
 	stw	r4, offStaticField_value(r3)	/* field<- vAA */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -3381,22 +3435,30 @@ dvmAsmInstructionStart = .L_OP_NOP
 	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
-0:	lwzux	r4, r19, rFP			/* r4<- fp[A] */
+0:
+	.if	0
+	addi	r5, r3, offStaticField_value
+	lwzux	r3, r19, rFP			/* r3<- fp[A] */
+	lwz	r4, 4(r19)
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	bl	dvmQuasiAtomicSwap64@plt
+	.else
+	lwzux	r4, r19, rFP			/* r4<- fp[A] */
 	lwz	r5, 4(r19)
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	stw	r4, offStaticField_value(r3)	/* (hi) byte offset of field */
 	stw	r5, offStaticField_value+4(r3)	/* (lo)  */
+	.endif
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
 /* ------------------------------ */
     .balign 128
 .L_OP_SPUT_OBJECT: /* 0x69 */
 /* File: powerpc/OP_SPUT_OBJECT.S */
-/* File: powerpc/OP_SPUT.S */
 	/*
-	 * General 32-bit SGET handler.
+	 * 32-bit SPUT handler for objects
 	 *
-	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 * for: sput-object
 	 */
 	/* op vAA, field@CCCC */
 	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
@@ -3419,12 +3481,15 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	lwzx	r4, r19, rFP			/* r3<- fp[A] */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	.ifnb 
-	
-	.endif
 	stw	r4, offStaticField_value(r3)	/* field<- vAA */
+	lwz	r20, offField_clazz(r3)
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r20, r20, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r4, 0				/* stored a null reference ? */
+	beq- 1f
+	stbx	r5, r5, r20			/* mark card if not zero */
+1:
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
-
 
 /* ------------------------------ */
     .balign 128
@@ -3432,9 +3497,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_SPUT_BOOLEAN.S */
 /* File: powerpc/OP_SPUT.S */
 	/*
-	 * General 32-bit SGET handler.
+	 * General 32-bit SPUT handler.
 	 *
-	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 * for: sput, sput-boolean, sput-byte, sput-char, sput-short
 	 */
 	/* op vAA, field@CCCC */
 	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
@@ -3460,6 +3525,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	.ifnb clrlwi	r4, r4, 24
 	clrlwi	r4, r4, 24
 	.endif
+	/* no-op */				/* releasing store */
 	stw	r4, offStaticField_value(r3)	/* field<- vAA */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -3470,9 +3536,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_SPUT_BYTE.S */
 /* File: powerpc/OP_SPUT.S */
 	/*
-	 * General 32-bit SGET handler.
+	 * General 32-bit SPUT handler.
 	 *
-	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 * for: sput, sput-boolean, sput-byte, sput-char, sput-short
 	 */
 	/* op vAA, field@CCCC */
 	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
@@ -3498,6 +3564,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	.ifnb extsb	r4, r4
 	extsb	r4, r4
 	.endif
+	/* no-op */				/* releasing store */
 	stw	r4, offStaticField_value(r3)	/* field<- vAA */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -3508,9 +3575,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_SPUT_CHAR.S */
 /* File: powerpc/OP_SPUT.S */
 	/*
-	 * General 32-bit SGET handler.
+	 * General 32-bit SPUT handler.
 	 *
-	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 * for: sput, sput-boolean, sput-byte, sput-char, sput-short
 	 */
 	/* op vAA, field@CCCC */
 	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
@@ -3536,6 +3603,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	.ifnb clrlwi	r4, r4, 16
 	clrlwi	r4, r4, 16
 	.endif
+	/* no-op */				/* releasing store */
 	stw	r4, offStaticField_value(r3)	/* field<- vAA */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -3546,9 +3614,9 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* File: powerpc/OP_SPUT_SHORT.S */
 /* File: powerpc/OP_SPUT.S */
 	/*
-	 * General 32-bit SGET handler.
+	 * General 32-bit SPUT handler.
 	 *
-	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 * for: sput, sput-boolean, sput-byte, sput-char, sput-short
 	 */
 	/* op vAA, field@CCCC */
 	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
@@ -3574,6 +3642,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	.ifnb extsh	r4, r4
 	extsh	r4, r4
 	.endif
+	/* no-op */				/* releasing store */
 	stw	r4, offStaticField_value(r3)	/* field<- vAA */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
 
@@ -3711,13 +3780,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	 */
 	/* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
 	/* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
-	FETCH(r4, 1)				/* r4<- BBBB */
-	slwi	r5, r4, 2			/* r5<- r4 << 2 */
-	EXPORT_PC()				/* must export for invoke */
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r6<- pDvmDex */
+	FETCH(r4, 1)				/* r4<- BBBB */
 	lwz	r6, offDvmDex_pResMethods(r6)	/* r6<- pDvmDex->pResMethods */
+	slwi	r5, r4, 2			/* r5<- r4 << 2 */
 	lwzx	r3, r6, r5			/* r3<- resolved methodToCall */
 	cmpwi	r3, 0				/* already resolved? */
+	EXPORT_PC()				/* must export for invoke */
 	bne+	common_invokeMethodNoRange	/* yes, calls */
 	lwz	r6, offGlue_method(rGLUE)	/* r6<- glue->method */
 	lwz	r3, offMethod_clazz(r6)		/* r3<- method->clazz */
@@ -3906,13 +3975,13 @@ dvmAsmInstructionStart = .L_OP_NOP
 	 */
 	/* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
 	/* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
-	FETCH(r4, 1)				/* r4<- BBBB */
-	slwi	r5, r4, 2			/* r5<- r4 << 2 */
-	EXPORT_PC()				/* must export for invoke */
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r6<- pDvmDex */
+	FETCH(r4, 1)				/* r4<- BBBB */
 	lwz	r6, offDvmDex_pResMethods(r6)	/* r6<- pDvmDex->pResMethods */
+	slwi	r5, r4, 2			/* r5<- r4 << 2 */
 	lwzx	r3, r6, r5			/* r3<- resolved methodToCall */
 	cmpwi	r3, 0				/* already resolved? */
+	EXPORT_PC()				/* must export for invoke */
 	bne+	common_invokeMethodRange	/* yes, calls */
 	lwz	r6, offGlue_method(rGLUE)	/* r6<- glue->method */
 	lwz	r3, offMethod_clazz(r6)		/* r3<- method->clazz */
@@ -4310,7 +4379,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_F_S(f1, r6)			/* f1<- vB */
-#ifndef KEEP_MAX_MIN_INT_IN_REGS
+#ifndef KEEP_MAX_MIN_LONG_IN_REGS
 	lis	r5, .LOP_FLOAT_TO_LONG_table@ha	/* r5<- start of constant table */
 	addi	r5, r5, .LOP_FLOAT_TO_LONG_table@l
 	lfs	f0, 0(r5)			/* f0<- max-long in float format */
@@ -4324,6 +4393,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	.LOP_FLOAT_TO_LONG_store_min_int	/* ==, store */
 #else
 	fcmpu	cr0, f1, fMaxLong		/* compare f1 with max long */
+	bun-	.LOP_FLOAT_TO_LONG_store_zero		/* f1 is NaN */
 	bgt-	.LOP_FLOAT_TO_LONG_store_max_int	/* >, store */
 	beq-	.LOP_FLOAT_TO_LONG_store_max_int	/* ==, store */
 	fcmpu	cr0, f1, fMinLong		/* compare f1 with min long */
@@ -4425,6 +4495,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	rlwinm  r7,rINST,26,26,29		/* r7<- (A+ & 15) << 2 */
 	GET_VREG_D_S(f1, r6)			/* f1<- vB/vB+1 */
+	frsp f1,f1
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 	SET_VREG_F_S(f1, r7)			/* vAA <- f1 */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & exec */
@@ -4796,7 +4867,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_S(r3, r5)			/* r3<- vBB */
 
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	slw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -4827,7 +4898,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_S(r3, r5)			/* r3<- vBB */
 
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	sraw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -4858,7 +4929,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_S(r3, r5)			/* r3<- vBB */
 
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	srw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -5968,7 +6039,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_S(r4, r6)			/* r4<- vB */
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	slw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -5997,7 +6068,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_S(r4, r6)			/* r4<- vB */
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	sraw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -6026,7 +6097,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	GET_VREG_S(r4, r6)			/* r4<- vB */
 	FETCH_ADVANCE_INST(1)			/* advance rPC, load rINST */
 
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	srw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -7367,7 +7438,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	srawi	r4, r6, 8			/* r4<- ssssssCC (sign extended) */
 
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	slw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -7399,7 +7470,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	srawi	r4, r6, 8			/* r4<- ssssssCC (sign extended) */
 
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	sraw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -7431,7 +7502,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	srawi	r4, r6, 8			/* r4<- ssssssCC (sign extended) */
 
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-					/* optional op; may set condition codes */
+	andi.	r4, r4, 31				/* optional op; may set condition codes */
 	srw	r3, r3, r4					/* r3<- op, r3-r6 changed */
 					/* optional op; more space */
 	SET_VREG_S(r3, r19)		/* vAA<- r3 */
@@ -7442,179 +7513,415 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_IGET_VOLATILE: /* 0xe3 */
-	/* stub for OP_IGET_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_IGET_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_IGET_VOLATILE.S */
+/* File: powerpc/OP_IGET.S */
+	/*
+	 * General 32-bit instance field get.
+	 *
+	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 */
+	/* op vA, vB, field@CCCC */
+	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
+	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
+#else
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveInstField@plt		/* r3<- resolved InstField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	cmpwi	r20, 0				/* check object for null */
+	beq-	common_errNullObject		/* object was null */
+	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
+	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	msync				/* acquiring load */
+	.ifnb 
+						/* perform masking (if requested) */
+	.endif
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	SET_VREG_S(r3, r19)			/* fp[A]<- r0 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IPUT_VOLATILE: /* 0xe4 */
-	/* stub for OP_IPUT_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_IPUT_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_IPUT_VOLATILE.S */
+/* File: powerpc/OP_IPUT.S */
+	/*
+	 * General 32-bit instance field get.
+	 *
+	 * for: iput, iput-boolean, iput-byte, iput-char, iput-short
+	 */
+	/* op vA, vB, field@CCCC */
+	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
+	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
+#else
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveInstField@plt		/* r3<- resolved InstField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	cmpwi	r20, 0				/* check object for null */
+	beq-	common_errNullObject		/* object was null */
+	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
+	.ifnb 
+						/* perform masking (if requested) */
+	.endif
+	msync				/* releasing store */
+	stwx	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SGET_VOLATILE: /* 0xe5 */
-	/* stub for OP_SGET_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_SGET_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_SGET_VOLATILE.S */
+/* File: powerpc/OP_SGET.S */
+	/*
+	 * General 32-bit SGET handler.
+	 *
+	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 */
+	/* op vAA, field@CCCC */
+	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	slwi	r5, r4, 2			/* r5<- r4*2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r6<- DvmDex */
+	lwz	r6, offDvmDex_pResFields(r6)	/* r6<- pDvmDex->pResFields */
+	lwzx	r3, r6, r5			/* r3<- resolved methodToCall */
+#else
+	lwzx	r3, rResFld, r5			/* r3<- resolved StaticField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	msync				/* acquiring load */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	.ifnb 
+	
+	.endif
+	stwx	r3, r19, rFP			/* fp[A]<- r0 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SPUT_VOLATILE: /* 0xe6 */
-	/* stub for OP_SPUT_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_SPUT_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_SPUT_VOLATILE.S */
+/* File: powerpc/OP_SPUT.S */
+	/*
+	 * General 32-bit SPUT handler.
+	 *
+	 * for: sput, sput-boolean, sput-byte, sput-char, sput-short
+	 */
+	/* op vAA, field@CCCC */
+	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	slwi	r5, r4, 2			/* r5<- r4*2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r6, offDvmDex_pResFields(r6)	/* r6<- pDvmDex->pResFields */
+	lwzx	r3, r6, r5			/* r3<- resolved StaticField ptr */
+#else
+	lwzx	r3, rResFld, r5			/* r3<- resolved StaticField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	lwzx	r4, r19, rFP			/* r3<- fp[A] */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	.ifnb 
+	
+	.endif
+	msync				/* releasing store */
+	stw	r4, offStaticField_value(r3)	/* field<- vAA */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IGET_OBJECT_VOLATILE: /* 0xe7 */
-	/* stub for OP_IGET_OBJECT_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_IGET_OBJECT_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_IGET_OBJECT_VOLATILE.S */
+/* File: powerpc/OP_IGET.S */
+	/*
+	 * General 32-bit instance field get.
+	 *
+	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 */
+	/* op vA, vB, field@CCCC */
+	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
+	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
+#else
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveInstField@plt		/* r3<- resolved InstField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	cmpwi	r20, 0				/* check object for null */
+	beq-	common_errNullObject		/* object was null */
+	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
+	lwzx	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	msync				/* acquiring load */
+	.ifnb 
+						/* perform masking (if requested) */
+	.endif
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	SET_VREG_S(r3, r19)			/* fp[A]<- r0 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IGET_WIDE_VOLATILE: /* 0xe8 */
-	/* stub for OP_IGET_WIDE_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_IGET_WIDE_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_IGET_WIDE_VOLATILE.S */
+/* File: powerpc/OP_IGET_WIDE.S */
+	/*
+	 * General 32-bit instance field get.
+	 *
+	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 */
+	/* op vA, vB, field@CCCC */
+	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
+	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
+#else
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveInstField@plt		/* r3<- resolved InstField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	cmpwi	r20, 0				/* check object for null */
+	beq-	common_errNullObject		/* object was null */
+	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
+	.if	1
+	add	r3, r20, r3
+	bl	dvmQuasiAtomicRead64@plt
+	.else
+	lwzux	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	lwz	r4, 4(r20)			/* r4 (lo) */
+	.endif
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	stwux	r3, r19, rFP			/* fp[A]<- r3 (hi) */
+	stw	r4, 4(r19)			/* <- r4 (lo) */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_IPUT_WIDE_VOLATILE: /* 0xe9 */
-	/* stub for OP_IPUT_WIDE_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_IPUT_WIDE_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_IPUT_WIDE_VOLATILE.S */
+/* File: powerpc/OP_IPUT_WIDE.S */
+	/*
+	 * General 32-bit instance field get.
+	 *
+	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 */
+	/* op vA, vB, field@CCCC */
+	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
+	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
+#else
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveInstField@plt		/* r3<- resolved InstField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	cmpwi	r20, 0				/* check object for null */
+	beq-	common_errNullObject		/* object was null */
+	lwz	r5, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+
+	lwzux	r3, r19, rFP			/* r3<-fp[A] (hi) */
+	lwz	r4, 4(r19)			/* lo */
+	.if 1
+	add	r5, r20, r5
+	bl	dvmQuasiAtomicSwap64@plt
+	.else
+	stwux	r3, r20, r5			/* obj.field(64 bits) <- r3 (hi)  */
+	stw	r4, 4(r20)			/* lo */
+	.endif
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SGET_WIDE_VOLATILE: /* 0xea */
-	/* stub for OP_SGET_WIDE_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_SGET_WIDE_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_SGET_WIDE_VOLATILE.S */
+/* File: powerpc/OP_SGET_WIDE.S */
+	/* op vAA, field@CCCC */
+	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	slwi	r5, r4, 2			/* r5<- r4*2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r6, offDvmDex_pResFields(r6)	/* r6<- pDvmDex->pResFields */
+	lwzx	r3, r6, r5			/* r3<- resolved StaticField ptr */
+#else
+	lwzx	r3, rResFld, r5			/* r3<- resolved StaticField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	
+	.if	1
+	addi	r3, r3, offStaticField_value
+	bl	dvmQuasiAtomicRead64@plt
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	stwux	r3, r19, rFP			/* fp[A]<- r3 */
+	stw	r4, 4(r19)
+	.else
+	lwz	r4, offStaticField_value(r3)
+	lwz	r5, offStaticField_value+4(r3)
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	stwux	r4, r19, rFP			/* fp[A]<- r3 */
+	stw	r5, 4(r19)
+	.endif
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SPUT_WIDE_VOLATILE: /* 0xeb */
-	/* stub for OP_SPUT_WIDE_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_SPUT_WIDE_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_SPUT_WIDE_VOLATILE.S */
+/* File: powerpc/OP_SPUT_WIDE.S */
+	/* op vAA, field@CCCC */
+	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	slwi	r5, r4, 2			/* r5<- r4*2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r6, offDvmDex_pResFields(r6)	/* r6<- pDvmDex->pResFields */
+	lwzx	r3, r6, r5			/* r3<- resolved StaticField ptr */
+#else
+	lwzx	r3, rResFld, r5			/* r3<- resolved StaticField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:
+	.if	1
+	addi	r5, r3, offStaticField_value
+	lwzux	r3, r19, rFP			/* r3<- fp[A] */
+	lwz	r4, 4(r19)
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	bl	dvmQuasiAtomicSwap64@plt
+	.else
+	lwzux	r4, r19, rFP			/* r4<- fp[A] */
+	lwz	r5, 4(r19)
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	stw	r4, offStaticField_value(r3)	/* (hi) byte offset of field */
+	stw	r5, offStaticField_value+4(r3)	/* (lo)  */
+	.endif
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_BREAKPOINT: /* 0xec */
-	/* stub for OP_BREAKPOINT */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_BREAKPOINT@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
-#endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+/* File: powerpc/OP_BREAKPOINT.S */
+/* File: powerpc/unused.S */
+	b	common_abort
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_THROW_VERIFICATION_ERROR: /* 0xed */
-	/* stub for OP_THROW_VERIFICATION_ERROR */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_THROW_VERIFICATION_ERROR@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
-#endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+/* File: powerpc/OP_THROW_VERIFICATION_ERROR.S */
+	/*
+	 * Handle a throw-verification-error instruction.  This throws an
+	 * exception for an error discovered during verification.  The
+	 * exception is indicated by AA, with some detail provided by BBBB.
+	 */
+	/* throw-verification-error AA, ref@BBBB */
+	rlwinm  r4,rINST,24,24,31		/* r4<- AA */
+	lwz	r3, offGlue_method(rGLUE)	/* r3<- glue->method */
+	FETCH(r5, 1)				/* r5<- BBBB */
+	EXPORT_PC()				/* export the PC */
+	bl	dvmThrowVerificationError@plt	/* always throws */
+	b	common_exceptionThrown		/* handle exception */
+
 /* ------------------------------ */
     .balign 128
 .L_OP_EXECUTE_INLINE: /* 0xee */
@@ -7623,7 +7930,7 @@ dvmAsmInstructionStart = .L_OP_NOP
 	 * Execute a "native inline" instruction.
 	 *
 	 * We need to call:
-	 *  dvmPerformInlineOp4Std(arg0, arg1, arg2, arg3, &retval, ref)
+	 *  bool (func)(u4 arg0, u4 arg1, u4 arg2, u4 arg3, JValue* pResult)
 	 */
 	/* [opt] execute-inline vAA, {vC, vD, vE, vF}, inline@BBBB */
 	FETCH(r19, 1)				/* r19<- BBBB */
@@ -7646,19 +7953,33 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_EXECUTE_INLINE_RANGE: /* 0xef */
-	/* stub for OP_EXECUTE_INLINE_RANGE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_EXECUTE_INLINE_RANGE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
-#endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+/* File: powerpc/OP_EXECUTE_INLINE_RANGE.S */
+	/*
+	 * Execute a "native inline" instruction, using "/range" semantics.
+	 * Same idea as execute-inline, but we get the args differently.
+	 *
+	 * We need to call:
+	 *  bool (func)(u4 arg0, u4 arg1, u4 arg2, u4 arg3, JValue* pResult)
+	 */
+	/* [opt] execute-inline/range {vCCCC..v(CCCC+AA-1)}, inline@BBBB */
+	FETCH(r19, 1)				/* r19<- BBBB */
+	FETCH(r20, 2)				/* r20<- CCCC */
+	EXPORT_PC()				/* can throw */
+	srwi	r3, rINST, 8			/* r3<- AA */
+	subfic	r3, r3, 4			/* r3<- 4-r3 */
+	slwi	r20, r20, 2			/* r20<- CCCC << 2 = vBase */
+	lis	r6, .LOP_EXECUTE_INLINE_RANGE_continue@ha	/* r6<- start of insn block */
+	addi	r6, r6, .LOP_EXECUTE_INLINE_RANGE_continue@l
+	slwi	r3, r3, 3			/* 2 insn  */
+	add	r0, r6, r3			/* point to first insn of switch */
+	mtctr	r0
+	bctrl					/* branch & link */
+	cmpwi	r3, 0				/* test boolean result of inline */
+	beq-	common_exceptionThrown		/* returned false, handle exception */
+	FETCH_ADVANCE_INST(3)			/* advance rPC, load rINST */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_INVOKE_DIRECT_EMPTY: /* 0xf0 */
@@ -7737,7 +8058,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     .balign 128
 .L_OP_IPUT_QUICK: /* 0xf5 */
 /* File: powerpc/OP_IPUT_QUICK.S */
-	/* For: iput-quick, iput-object-quick */
+	/* For: iput-quick */
 	/* op vA, vB, offset@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r5,rINST,22,10,29		/* r3<- B << 2 */
@@ -7773,8 +8094,7 @@ dvmAsmInstructionStart = .L_OP_NOP
     .balign 128
 .L_OP_IPUT_OBJECT_QUICK: /* 0xf7 */
 /* File: powerpc/OP_IPUT_OBJECT_QUICK.S */
-/* File: powerpc/OP_IPUT_QUICK.S */
-	/* For: iput-quick, iput-object-quick */
+	/* For: iput-object-quick */
 	/* op vA, vB, offset@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r5,rINST,22,10,29		/* r3<- B << 2 */
@@ -7784,9 +8104,14 @@ dvmAsmInstructionStart = .L_OP_NOP
 	beq-	common_errNullObject		/* object was null */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
-	stwx	r3, r6, r4			/* r3<- obj.field (always 32 bits)*/
+	stwx	r3, r6, r4			/* obj.field (always 32 bits) <- r3 */
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r6, r6, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r3, 0				/* stored a null reference ? */
+	beq- 1f
+	stbx	r5, r5, r6			/* mark card if not zero */
+1:
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
-
 
 /* ------------------------------ */
     .balign 128
@@ -7911,51 +8236,131 @@ dvmAsmInstructionStart = .L_OP_NOP
 /* ------------------------------ */
     .balign 128
 .L_OP_IPUT_OBJECT_VOLATILE: /* 0xfc */
-	/* stub for OP_IPUT_OBJECT_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_IPUT_OBJECT_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_IPUT_OBJECT_VOLATILE.S */
+/* File: powerpc/OP_IPUT_OBJECT.S */
+	/*
+	 * Object field put
+	 *
+	 * for: iput-object
+	 */
+	/* op vA, vB, field@CCCC */
+	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
+	rlwinm  r3,rINST,22,10,29		/* r3<- B << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	GET_VREG_S(r20, r3)			/* r20<- fp[B], the object pointer */
+	slwi	r3, r4, 2			/* r3<- r4 << 2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r5, offDvmDex_pResFields(r6)	/* r5<- pDvmDex->pResFields */
+	lwzx	r3, r5, r3			/* r3<- resolved InstField ptr */
+#else
+	lwzx	r3, rResFld, r3			/* r3<- resolved InstField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveInstField@plt		/* r3<- resolved InstField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	cmpwi	r20, 0				/* check object for null */
+	beq-	common_errNullObject		/* object was null */
+	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
+	msync
+	stwx	r3, r20, r4			/* obj.field (32 bits) <- r3 */
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r20, r20, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r3, 0				/* stored a null reference ? */
+	beq- 1f
+	stbx	r5, r5, r20			/* mark card if not zero */
+1:
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SGET_OBJECT_VOLATILE: /* 0xfd */
-	/* stub for OP_SGET_OBJECT_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_SGET_OBJECT_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_SGET_OBJECT_VOLATILE.S */
+/* File: powerpc/OP_SGET.S */
+	/*
+	 * General 32-bit SGET handler.
+	 *
+	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 */
+	/* op vAA, field@CCCC */
+	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	slwi	r5, r4, 2			/* r5<- r4*2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r6<- DvmDex */
+	lwz	r6, offDvmDex_pResFields(r6)	/* r6<- pDvmDex->pResFields */
+	lwzx	r3, r6, r5			/* r3<- resolved methodToCall */
+#else
+	lwzx	r3, rResFld, r5			/* r3<- resolved StaticField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	lwz	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	msync				/* acquiring load */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	.ifnb 
+	
+	.endif
+	stwx	r3, r19, rFP			/* fp[A]<- r0 */
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_SPUT_OBJECT_VOLATILE: /* 0xfe */
-	/* stub for OP_SPUT_OBJECT_VOLATILE */
-	SAVE_PC_FP_TO_GLUE()		/* only need to export these two */
-	mr	r3, rGLUE		/* glue is first arg to function */
-	bl	dvmMterp_OP_SPUT_OBJECT_VOLATILE@plt	/* call */
-	LOAD_PC_FP_FROM_GLUE()		/* retrieve updated values */
-#ifdef KEEP_RES_FIELDS_IN_REGS
-	lwz	rResStr, offGlue_methodClassDex(rGLUE)
-	lwz	rResFld, offDvmDex_pResFields(rResStr)
-	lwz	rResCls, offDvmDex_pResClasses(rResStr)
-	lwz	rResStr, offDvmDex_pResStrings(rResStr)
+/* File: powerpc/OP_SPUT_OBJECT_VOLATILE.S */
+/* File: powerpc/OP_SPUT_OBJECT.S */
+	/*
+	 * 32-bit SPUT handler for objects
+	 *
+	 * for: sput-object
+	 */
+	/* op vAA, field@CCCC */
+	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */
+	FETCH(r4, 1)				/* r4<- field ref CCCC */
+	slwi	r5, r4, 2			/* r5<- r4*2 */
+#ifndef KEEP_RES_FIELDS_IN_REGS
+	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r3<- DvmDex */
+	lwz	r6, offDvmDex_pResFields(r6)	/* r6<- pDvmDex->pResFields */
+	lwzx	r3, r6, r5			/* r3<- resolved StaticField ptr */
+#else
+	lwzx	r3, rResFld, r5			/* r3<- resolved StaticField ptr */
 #endif
-	FETCH_INST()			/* load next instruction from rPC */
-	GET_INST_OPCODE_GOTO(r0)	/* ...trim down to just the opcode */
+	cmpwi	r3, 0				/* is resolved entry null? */
+	bne+	0f				/* no, already resolved */
+	lwz	r5, offGlue_method(rGLUE)	/* r5<- current method */
+	EXPORT_PC()				/* resolve() could throw */
+	lwz	r3, offMethod_clazz(r5)		/* r3<- method->clazz */
+	bl	dvmResolveStaticField@plt	/* r3<- resolved StaticField ptr */
+	cmpwi	r3, 0				/* zero? */
+	beq-	common_exceptionThrown		/* yes, exception */
+0:	lwzx	r4, r19, rFP			/* r3<- fp[A] */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	stw	r4, offStaticField_value(r3)	/* field<- vAA */
+	lwz	r20, offField_clazz(r3)
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r20, r20, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r4, 0				/* stored a null reference ? */
+	beq- 1f
+	stbx	r5, r5, r20			/* mark card if not zero */
+1:
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
+
+
 /* ------------------------------ */
     .balign 128
 .L_OP_UNUSED_FF: /* 0xff */
@@ -8050,19 +8455,6 @@ dvmAsmSisterStart:
 	bne+	.LOP_NEW_INSTANCE_initialized		/* success, continue */
 	b	common_exceptionThrown		/* failed, deal with init exception */
 
-	/*
-	 * We can't instantiate an abstract class or interface, so throw an
-	 * InstantiationError with the class descriptor as the message.
-	 *
-	 *  r3 holds class object
-	 */
-.LOP_NEW_INSTANCE_abstract:
-	lis	r3, .LstrInstantiationError@ha
-	addi	r3, r3, .LstrInstantiationError@l
-	lwz	r4, offClassObject_descriptor(r3)
-	bl	dvmThrowExceptionWithClassMessage@plt
-	b	common_exceptionThrown
-
 /* continuation for OP_NEW_ARRAY */
 
 
@@ -8089,18 +8481,18 @@ dvmAsmSisterStart:
 	/*
 	 * On entry:
 	 *  r3 holds array class
-	 *  r19 holds A
-	 *  r20 holds B
+	 *  r19 holds A << 2 (!range)
+	 *  r20 holds B(!range) or length(range)
 	 */
 .LOP_FILLED_NEW_ARRAY_continue:
 	lwz	r6, offClassObject_descriptor(r3)	/* r6<- arrayClass->descriptor */
-	lbz	r6, 1(r6)			/* r6<- descriptor[1] */
+	lbz	r21, 1(r6)			/* r6<- descriptor[1] */
 
-	cmpwi	r6, 'I'				/* array of ints? */
+	cmpwi	r21, 'I'				/* array of ints? */
 	beq+	0f
-	cmpwi	r6, 'L'				/* array of objects? */
+	cmpwi	r21, 'L'				/* array of objects? */
 	beq	0f
-	cmpwi	r6, '['				/* array of arrays? */
+	cmpwi	r21, '['				/* array of arrays? */
 	beq	0f
 	b	.LOP_FILLED_NEW_ARRAY_notimpl		/* no, not handled yet */
 0:	mr	r4, r20				/* r4<- r20 (length) */
@@ -8109,30 +8501,52 @@ dvmAsmSisterStart:
 	cmpwi	r3, 0				/* null return? */
 	beq-	common_exceptionThrown		/* alloc failed, handle exception */
 
-	FETCH(r4, 2)				/* r4<- FEDC */
+	FETCH(r4, 2)				/* r4<- FEDC or CCCC */
 	FETCH_ADVANCE_INST(3)			/* advance to next instr, load rINST */
 	stw     r3, offGlue_retval(rGLUE)	/* retval.l <- new array */
+	stw     r21, offGlue_retval+4(rGLUE)	/* retval.h <- type */
 	addi	r3, r3, offArrayObject_contents	/* r3<- newArray->contents */
 
-	/* copy values from registers into the array */
 	/* r3=array, r4=FEDC, r19<- A << 2, r20 = B */
-
-	cmpwi	r20, 0				/* length <= 0? */
-	ble-	3f				/* yes, bail */
-	cmpwi	r20, 4				/* length was initially 5? */
-	bne-	2f				/* <= 4 args, branch */
+	/* r3=array, r4=CCCC, r20=AA */
+	/* copy values from registers into the array */
+	cmpwi	r20, 0				/* length was initially <= 0 */
+	ble-	2f				/* yes, bail */
+	.if	0
+	mtctr	r20				/* ctr<- r20 */
+	slwi	r6, r4, 2			/* r6<- r4 << 2 */
+	add     r5, rFP, r6			/* r5<- &fp[CCCC] */
+	addi	r3, r3, -4			/* point one back for pre-inc */
+	addi	r5, r5, -4			/* point one back for pre-inc */
+1:	lwzu	r6, 4(r5)			/* r6<- *++r5 */
+	stwu	r6, 4(r3)			/* *++contents = vX */
+	bdnz+	1b				/* loop while ctr > 0 */
+	.else
+	cmpwi	r20, 5				/* length was initially 5? */
+	bne+	3f				/* <= 4 args, branch */
+	li	r20, 4				/* r20<- dec = 4 */
 	GET_VREG_S(r6, r19)			/* r6<- vA */
 	stw	r6, 16(r3)			/* contents[4] = vA */
-	addi	r20, r20, -1			/* r20<- dec */
-2:	mtctr	r20				/* loop counter */
+3:	mtctr	r20				/* loop counter */
 	addi	r3, r3, -4			/* point one back for pre-inc */
 1:	rlwinm  r5,r4,2,26,29			/* r5<- (F/E/D/C & 15) << 2 */
+	srwi	r4, r4, 4			/* r4<- r4 >> 4 */
 	GET_VREG_S(r6, r5)			/* r6<- vF/vE/vD/vC */
 	stwu	r6, 4(r3)			/* *++contents = vX */
-	srwi	r4, r4, 4			/* r4<- r4 >> 4 */
 	bdnz+	1b				/* loop while ctr > 0 */
+	.endif
 
-2:	GET_INST_OPCODE_GOTO(r0)		/* r0<- opcode from rINST */
+2:
+	lwz	r3, offGlue_retval(rGLUE)	/* r3<- object */
+	lwz	r4, offGlue_retval+4(rGLUE)	/* r4<- type */
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r3, r3, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r4, 'I'				/* array of ints? */
+	beq-	4f
+	stbx	r5, r5, r3
+4:
+
+	GET_INST_OPCODE_GOTO(r0)		/* r0<- opcode from rINST */
 
 	/*
 	 * Throw an exception indicating that we have not implemented this
@@ -8147,37 +8561,43 @@ dvmAsmSisterStart:
 	b       common_exceptionThrown
 
 /* continuation for OP_FILLED_NEW_ARRAY_RANGE */
+
 	/*
 	 * On entry:
 	 *  r3 holds array class
-	 *  r19 holds length
+	 *  r19 holds A << 2 (!range)
+	 *  r20 holds B(!range) or length(range)
 	 */
 .LOP_FILLED_NEW_ARRAY_RANGE_continue:
 	lwz	r6, offClassObject_descriptor(r3)	/* r6<- arrayClass->descriptor */
-	lbz	r6, 1(r6)			/* r6<- descriptor[1] */
-	cmpwi	r6, 'I'				/* array of ints? */
+	lbz	r21, 1(r6)			/* r6<- descriptor[1] */
+
+	cmpwi	r21, 'I'				/* array of ints? */
 	beq+	0f
-	cmpwi	r6, 'L'				/* array of objects? */
+	cmpwi	r21, 'L'				/* array of objects? */
 	beq	0f
-	cmpwi	r6, '['				/* array of arrays? */
+	cmpwi	r21, '['				/* array of arrays? */
 	beq	0f
 	b	.LOP_FILLED_NEW_ARRAY_RANGE_notimpl		/* no, not handled yet */
-0:	mr	r4, r19				/* r4<- r19 (length) */
+0:	mr	r4, r20				/* r4<- r20 (length) */
 	li	r5, ALLOC_DONT_TRACK		/* r5<- alloc flags */
 	bl	dvmAllocArrayByClass@plt	/* r3<- call(arClass, length, flags) */
 	cmpwi	r3, 0				/* null return? */
 	beq-	common_exceptionThrown		/* alloc failed, handle exception */
 
-	FETCH(r4, 2)				/* r4<- CCCC */
+	FETCH(r4, 2)				/* r4<- FEDC or CCCC */
 	FETCH_ADVANCE_INST(3)			/* advance to next instr, load rINST */
 	stw     r3, offGlue_retval(rGLUE)	/* retval.l <- new array */
+	stw     r21, offGlue_retval+4(rGLUE)	/* retval.h <- type */
 	addi	r3, r3, offArrayObject_contents	/* r3<- newArray->contents */
 
+	/* r3=array, r4=FEDC, r19<- A << 2, r20 = B */
+	/* r3=array, r4=CCCC, r20=AA */
 	/* copy values from registers into the array */
-	/* r3=array, r4=CCCC, r19=AA */
-	cmpwi	r19, 0				/* length was initially <= 0 */
-	ble	2f				/* yes, bail */
-	mtctr	r19				/* ctr<- r19 */
+	cmpwi	r20, 0				/* length was initially <= 0 */
+	ble-	2f				/* yes, bail */
+	.if	1
+	mtctr	r20				/* ctr<- r20 */
 	slwi	r6, r4, 2			/* r6<- r4 << 2 */
 	add     r5, rFP, r6			/* r5<- &fp[CCCC] */
 	addi	r3, r3, -4			/* point one back for pre-inc */
@@ -8185,8 +8605,32 @@ dvmAsmSisterStart:
 1:	lwzu	r6, 4(r5)			/* r6<- *++r5 */
 	stwu	r6, 4(r3)			/* *++contents = vX */
 	bdnz+	1b				/* loop while ctr > 0 */
+	.else
+	cmpwi	r20, 5				/* length was initially 5? */
+	bne+	3f				/* <= 4 args, branch */
+	li	r20, 4				/* r20<- dec = 4 */
+	GET_VREG_S(r6, r19)			/* r6<- vA */
+	stw	r6, 16(r3)			/* contents[4] = vA */
+3:	mtctr	r20				/* loop counter */
+	addi	r3, r3, -4			/* point one back for pre-inc */
+1:	rlwinm  r5,r4,2,26,29			/* r5<- (F/E/D/C & 15) << 2 */
+	srwi	r4, r4, 4			/* r4<- r4 >> 4 */
+	GET_VREG_S(r6, r5)			/* r6<- vF/vE/vD/vC */
+	stwu	r6, 4(r3)			/* *++contents = vX */
+	bdnz+	1b				/* loop while ctr > 0 */
+	.endif
 
-2:	GET_INST_OPCODE_GOTO(r0)		/* r0<- opcode from rINST */
+2:
+	lwz	r3, offGlue_retval(rGLUE)	/* r3<- object */
+	lwz	r4, offGlue_retval+4(rGLUE)	/* r4<- type */
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r3, r3, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r4, 'I'				/* array of ints? */
+	beq-	4f
+	stbx	r5, r5, r3
+4:
+
+	GET_INST_OPCODE_GOTO(r0)		/* r0<- opcode from rINST */
 
 	/*
 	 * Throw an exception indicating that we have not implemented this
@@ -8236,6 +8680,28 @@ dvmAsmSisterStart:
 	SET_VREG_S(r3, r19)			/* vAA<- e3 */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 
+/* continuation for OP_APUT_OBJECT */
+
+.LOP_APUT_OBJECT_finish:
+	lwz	r4, offObject_clazz(r21)	/* r4<- arrayObj->clazz */
+	lwz	r3, offObject_clazz(r19)	/* r3<- obj->clazz */
+	bl	dvmCanPutArrayElement@plt	/* test object type vs. array type */
+	cmpwi	r3, 0				/* okay? */
+	beq-	common_errArrayStore		/* no */
+	stw	r19, offArrayObject_contents(r20) /* vBB[vCC] <- r19*/
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r21, r21, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r19, 0				/* stored a null reference ? */
+	beq- 1f
+	stbx	r5, r5, r21			/* mark card if not zero */
+1:
+
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+.LOP_APUT_OBJECT_skip_check:
+	stw	r19, offArrayObject_contents(r20) /* r19<- vBB[vCC] */
+
+	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
+
 /* continuation for OP_INVOKE_SUPER */
 .LOP_INVOKE_SUPER_nsm:
 	lwz	r4, offMethod_name(r3)		/* r4<- method name */
@@ -8271,7 +8737,7 @@ dvmAsmSisterStart:
 
 /* continuation for OP_FLOAT_TO_LONG */
 
-#ifndef KEEP_MAX_MIN_INT_IN_REGS
+#ifndef KEEP_MAX_MIN_LONG_IN_REGS
 	.align	4
 .LOP_FLOAT_TO_LONG_table:
 	.float	9223372036854775807	/* max-long */
@@ -8478,13 +8944,33 @@ dvmAsmSisterStart:
 
 .LOP_EXECUTE_INLINE_continue:
 4:	rlwinm	r6, r20, 22, 26, 29		/* r6 = (FEDC & 0xf000) >> 10 */
-	lwzx	r6, rFP, r5			/* r6<- vF (shift right 12, left 2) */
+	lwzx	r6, rFP, r6			/* r6<- vF (shift right 12, left 2) */
 3:	rlwinm	r5, r20, 26, 26, 29		/* r6 = (FEDC & 0x0f00) >> 6) */
 	lwzx	r5, rFP, r5			/* r6<- vE (shift right 8, left 2) */
 2:	rlwinm	r4, r20, 30, 26, 29		/* r6 = (FEDC & 0x00f0) >> 2) */
 	lwzx	r4, rFP, r4			/* r6<- vD (shift right 4, left 2) */
 1:	rlwinm	r3, r20, 2, 26, 29		/* r6 = (FEDC & 0x000f) << 2) */
 	lwzx	r3, rFP, r3			/* r6<- vC (shift right 0, left 2) */
+
+	lis	r8, gDvmInlineOpsTable@ha	/* point to Inline OpsTable */
+	addi	r8, r8, gDvmInlineOpsTable@l
+	slwi	r9, r19, 4			/* convert * 16 */
+	lwzx	r0, r8, r9			/* load func */
+	addi	r7, rGLUE, offGlue_retval  	/* r7<- &glue->retval */
+	mtctr	r0
+	bctr					/* exec */
+
+/* continuation for OP_EXECUTE_INLINE_RANGE */
+
+.LOP_EXECUTE_INLINE_RANGE_continue:
+4:	addi	r7, r20, 12			/* base + 3 << 2 */
+	lwzx	r6, rFP, r7			/* r6<- vBase[3] */
+3:	addi	r7, r20, 8			/* base + 2 << 2 */
+	lwzx	r4, rFP, r7			/* r5<- vBase[2] */
+2:	addi	r7, r20, 4			/* base + 1 << 2 */
+	lwzx	r4, rFP, r7			/* r4<- vBase[1] */
+1:	addi	r7, r20, 0			/* base + 0 << 2 */
+	lwzx	r3, rFP, r7			/* r3<- vBase[0] */
 
 	lis	r8, gDvmInlineOpsTable@ha	/* point to Inline OpsTable */
 	addi	r8, r8, gDvmInlineOpsTable@l
@@ -8523,61 +9009,79 @@ common_backwardBranch:
 
 /*
  * Need to see if the thread needs to be suspended or debugger/profiler
- * activity has begun.
+ * activity has begun.  If so, we suspend the thread or side-exit to
+ * the debug interpreter as appropriate.
  *
- * TODO: if JDWP isn't running, zero out pDebuggerActive pointer so we don't
- * have to do the second ld.
+ * The common case is no activity on any of these, so we want to figure
+ * that out quickly.  If something is up, we can then sort out what.
+ *
+ * We want to be fast if the VM was built without debugger or profiler
+ * support, but we also need to recognize that the system is usually
+ * shipped with both of these enabled.
  *
  * TODO: reduce this so we're just checking a single location.
  *
  * On entry:
- *  r3 is reentry type, e.g. kInterpEntryInstr
+ *  r3 is reentry type, e.g. kInterpEntryInstr (for debugger/profiling)
  *  r11 is trampoline PC adjustment *in bytes*
  */
 common_periodicChecks:
 	lwz	r10, offGlue_pSelfSuspendCount(rGLUE)	/* r10<- &suspendCount */
-
-#if defined(WITH_DEBUGGER)
 	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
-#endif
-#if defined(WITH_PROFILER)
 	lwz	r8, offGlue_pActiveProfilers(rGLUE)	/* r8<- &activeProfilers */
-#endif
 
-	lwz	r10, 0(r10)				/* r10<- suspendCount (int) */
+	lwz	r7, 0(r10)				/* r7<- suspendCount (int) */
+	cmpwi	r7, 0
+	bne	3f
 
-#if defined(WITH_DEBUGGER)
-	lwz	r9, 0(r9)				/* r9<- debuggerActive (boolean) */
-#endif
-#if defined (WITH_PROFILER)
-	lwz     r8, 0(r8)				/* r8<- activeProfilers (int) */
-#endif
+2:
+	cmpwi	r9, 0					/* debugger enabled ? */
+	beq	0f
+	lbz	r9, 0(r9)				/* r9<- debuggerActive (boolean) */
+	cmpwi	r9, 0
+	bne	1f
 
-	/* suspend pending? */
-	cmpwi	r10, 0					/* yes, check suspend */
-	bne	2f
-
-#if defined(WITH_DEBUGGER) || defined(WITH_PROFILER)
-# if defined(WITH_DEBUGGER) && defined(WITH_PROFILER)
-	or	r9, r9, r8				/* debugger attached or profiler started? */
-	cmpwi	r9, 0					/* yes, check suspend */
-# elif defined(WITH_DEBUGGER)
-	cmpwi	r9, 0					/* yes, check suspend */
-# elif defined(WITH_PROFILER)
-	cmpwi	r8, 0					/*  profiler started? */
-# endif
-	bne	3f					/*  debugger/profiler, switch interp */
-#endif
+0:	lwz     r8, 0(r8)				/* r8<- activeProfilers (int) */
+	cmpwi	r8, 0
+	bne	1f
 
 	blr						/*  nothing to do, return */
 
-2:	lwz	r3, offGlue_self(rGLUE)			/* check suspend */
-	b	dvmCheckSuspendPending@plt
+	/*
+	 * One or more interesting events have happened.  Figure out what.
+	 *
+	 * If debugging or profiling are compiled in, we need to disambiguate.
+	 *
+	 * r3 still holds the reentry type.
+	 */
+3:
+	/* preserve r3, r11 and lr */
+	mflr	r19
+	mr	r20, r3
+	mr	r21, r11
+	lwz	r3, offGlue_self(rGLUE)			/* check suspend */
+	EXPORT_PC()					/* needed for precise GC */
+	bl	dvmCheckSuspendPending@plt		/* do full check, suspend if necessary */
+	mr	r11, r21
+	mr	r3, r20
+	mtlr	r19
 
-3:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
-	stw     r3, offGlue_entryPoint(rGLUE)
+	/*
+	 * Reload the debugger/profiler enable flags.  We're checking to see
+	 * if either of these got set while we were suspended.
+	 *
+	 * We can't really avoid the #ifdefs here, because the fields don't
+	 * exist when the feature is disabled.
+	 */
+	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
+	lwz	r8, offGlue_pActiveProfilers(rGLUE)	/* r8<- &activeProfilers */
+
+	b 2b
+
+1:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
+	stw	r3, offGlue_entryPoint(rGLUE)		/* store r3, need for debug/prof */
 	li      r4, 1                      		/* "want switch" = true */
-	b       common_gotoBail
+	b       common_gotoBail				/* side exit */
 
 /*
  * The equivalent of "goto bail", this calls through the "bail handler".
@@ -8604,8 +9108,10 @@ common_invokeMethodRange:
 	/* prepare to copy args to "outs" area of current frame */
 	srwi	r5, rINST, 8
 	SAVEAREA_FROM_FP(r11, rFP)		/* r11<- stack save area */
+	FETCH(r4, 2)				/* r4<- CCCC, (load here to hide latency) */
+	lhz	r7, offMethod_registersSize(r3)		/* r7<- methodToCall->regsSize */
+	lhz	r8, offMethod_outsSize(r3)		/* r8<- methodToCall->outsSize */
 	beq	.LinvokeArgsDone                /* if no args, skip the rest */
-	FETCH(r4, 2)				/* r4<- CCCC */
 
 	/* r3=methodToCall, r4=CCCC, r5=count, r11=outs */
 	/* (very few methods have > 10 args; could unroll for common cases) */
@@ -8633,17 +9139,19 @@ common_invokeMethodNoRange:
 	SAVEAREA_FROM_FP(r11, rFP)		/* r11<- stack save area */
 	srwi	r5, rINST, 12			/* r5<- B (arg count) -- test for zero */
 	cmpwi	r5, 0
-	beq	.LinvokeArgsDone		/* if no args, skip the rest */
-	FETCH(r4, 2)				/* r4<- GFED */
+	FETCH(r4, 2)				/* r4<- GFED, (load here to hide latency) */
+	lhz	r7, offMethod_registersSize(r3)		/* r5<- methodToCall->regsSize */
+	lhz	r8, offMethod_outsSize(r3)		/* r6<- methodToCall->outsSize */
+	beq	.LinvokeArgsDone
 
-	/* r3=methodToCall, r4=GFED, r5=count, r11=outs */
+	/* r3=methodToCall, r4=GFED, r5=count, r7=regSize, r8=outSize, r11=outs */
 .LinvokeNonRange:
 	subfic	r5, r5, 5			/* r5<- 5-r5 */
 	lis	r6, 5f@ha			/* r6<- start of insn block */
 	addi	r6, r6, 5f@l
 	slwi	r5, r5, 4			/* 4 insn  */
-	add	r7, r6, r5			/* r6 first insn of case */
-	mtctr	r7				/* move r6 to ctr */
+	add	r9, r6, r5			/* r9 first insn of case */
+	mtctr	r9				/* move r9 to ctr */
 	bctr					/* perform computed goto */
 
 5:	rlwinm	r6, rINST, 26, 26, 29		/* r6 = (rINST & 0x0f00) >> 6 */
@@ -8673,24 +9181,23 @@ common_invokeMethodNoRange:
 
 0:	/* fall through to .LinvokeArgsDone */
 
-.LinvokeArgsDone:	/* r3=methodToCall */
+.LinvokeArgsDone:	/* r3=methodToCall, r7=regsSize, r8=outsSize  */
+	lwz	rINST, offMethod_insns(r3)		/* rINST<- method->insns */
+	lwz	r9, offMethod_clazz(r3)			/* r9 <- method->clazz */
+
 	/* find space for the new stack frame, check for overflow */
 	SAVEAREA_FROM_FP(r4, rFP)			/* r4<- stack save area */
-	lhz	r5, offMethod_registersSize(r3)		/* r5<- methodToCall->regsSize */
-	slwi	r5, r5, 2				/* r5 *= 4 */
+	slwi	r5, r7, 2				/* r5 = regsSize << 2 */
 	sub	r4, r4, r5				/* r4<- newFp (old savearea - regsSize) */
 	SAVEAREA_FROM_FP(r11, r4)			/* r11<- newSaveArea */
 	lwz	r5, offGlue_interpStackEnd(rGLUE)	/* r5<- interpStackEnd */
-	lhz	r6, offMethod_outsSize(r3)		/* r6<- methodToCall->outsSize */
-	slwi	r6, r6, 2				/* r6 *= 4 */
+	slwi	r6, r8, 2				/* r6 = outsSize << 2 */
 	sub	r6, r11, r6				/* r6<- bottom (newsave - outsSize) */
 
-	cmpw	r6, r5					/* bottom < interpStackEnd? */
-	bgt-	0f					/* no, this frame will not overflow stack */
-	lhz	r7, offMethod_registersSize(r3)		/* r5<- methodToCall->regsSize */
-	lhz	r8, offMethod_outsSize(r3)		/* r6<- methodToCall->outsSize */
-	b	.LstackOverflow				/* yes, this frame will overflow stack */
-0:
+	cmplw	r6, r5					/* bottom < interpStackEnd? */
+	lwz	r6, offMethod_accessFlags(r3)		/* r6<- methodToCall->accessFlags */
+	blt-	.LstackOverflow				/* yes, this frame will overflow stack */
+
 	/* set up newSaveArea */
 #ifdef EASY_GDB
 	SAVEAREA_FROM_FP(r10, rFP)			/* r10<- stack save area */
@@ -8700,18 +9207,17 @@ common_invokeMethodNoRange:
 	stw	rPC, offStackSaveArea_savedPc(r11)
 	stw	r3, offStackSaveArea_method(r11)
 
-	lwz	r6, offMethod_accessFlags(r3)		/* r6<- methodToCall->accessFlags */
 	andi.	r6, r6, ACC_NATIVE
 	bne	.LinvokeNative
 
-	/* Update "glue" values for the new method */
-	/* r3=methodToCall, r4=newFp */
-	lwz	r6, offMethod_clazz(r3)			/* r6<- method->clazz */
-	stw	r3, offGlue_method(rGLUE)		/* glue->method = methodToCall */
-	lwz	r6, offClassObject_pDvmDex(r6)		/* r6<- method->clazz->pDvmDex */
-	lwz	rPC, offMethod_insns(r3)		/* rPC<- method->insns */
-	stw	r6, offGlue_methodClassDex(rGLUE)	/* glue->methodClassDex = ... */
+	lwz	r6, offClassObject_pDvmDex(r9)		/* r6<- method->clazz->pDvmDex */
+	mr	rPC, rINST				/* publish new rPC */
 	lwz	r5, offGlue_self(rGLUE)			/* r5<- glue->self */
+
+	/* Update "glue" values for the new method */
+	/* r3=methodToCall, r4=newFp, r5=self, r6=newMethodClass */
+	stw	r3, offGlue_method(rGLUE)		/* glue->method = methodToCall */
+	stw	r6, offGlue_methodClassDex(rGLUE)	/* glue->methodClassDex = ... */
 	mr	rFP, r4					/* fp = newFp */
 	stw	r4, offThread_curFrame(r5)		/* self->curFrame = newFp */
 #ifdef KEEP_RES_FIELDS_IN_REGS
@@ -8761,6 +9267,7 @@ dalvik_mterp:
 	GET_INST_OPCODE_GOTO(r0)			/* extract opcode from rINST */
 
 .LstackOverflow:
+	mr	r4, r3					/* r4<- methodToCall */
 	lwz	r3, offGlue_self(rGLUE)			/* r3<- self */
 	bl	dvmHandleStackOverflow@plt
 	b	common_exceptionThrown
@@ -8784,16 +9291,16 @@ common_returnFromMethod:
 	lwz	rFP, offStackSaveArea_prevFrame(r3)	/* fp = saveArea->prevFrame */
 	lwz	r5, (offStackSaveArea_method - sizeofStackSaveArea)(rFP)
 							/* r5<- method we're returning to */
-	li	r4, 0					/* "want switch" = false */
+	lwz	r6, offGlue_self(rGLUE)			/* r6<- glue->self */
 	cmpwi	r5, 0					/* is this a break frame? */
+	li	r4, 0					/* "want switch" = false */
 	beq-	common_gotoBail				/* break frame, bail out completely */
+	lwz	r4, offMethod_clazz(r5)			/* r4<- method->clazz */
 
 	lwz	rPC, offStackSaveArea_savedPc(r3)	/* pc = saveArea->savedPc */
-	lwz	r6, offGlue_self(rGLUE)			/* r6<- glue->self */
 	stw	r5, offGlue_method(rGLUE)		/* glue->method = newSave->method */
-	stw	rFP, offThread_curFrame(r6)		/* self->curFrame = fp */
-	lwz	r4, offMethod_clazz(r5)			/* r4<- method->clazz */
 	lwz	r4, offClassObject_pDvmDex(r4)		/* r4<- method->clazz->pDvmDex */
+	stw	rFP, offThread_curFrame(r6)		/* self->curFrame = fp */
 	stw	r4, offGlue_methodClassDex(rGLUE)
 #ifdef KEEP_RES_FIELDS_IN_REGS
 	lwz	rResStr, offGlue_methodClassDex(rGLUE)
@@ -8849,6 +9356,7 @@ common_exceptionThrown:
 	beq+	1f					/* no skip ahead */
 	mr	rFP, r3					/* save relPc result in rFP */
 	mr	r3, r20					/* r3<- self */
+	mr	r4, r19					/* r4<- exception */
 	bl	dvmCleanupStackOverflow@plt		/* call(self) */
 	mr	r3, rFP					/* restore result */
 
@@ -8896,6 +9404,7 @@ common_exceptionThrown:
 	cmpwi	r4, 0					/* did we overflow earlier? */
 	beq-	1f					/* yes? */
 	mr	r3, r20					/* r3<- self */
+	mr	r4, r19					/* r4<- exception */
 	bl	dvmCleanupStackOverflow@plt		/* call(self) */
 1:
 	/* may want to show "not caught locally" debug messages here */
