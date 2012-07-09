@@ -1,4 +1,4 @@
-%default { "load":"lwzx", "mask":"" }
+%default { "load":"lwzx", "mask":"", "barrier":"/* no-op */" }
 %verify "executed"
 %verify "null object"
 %verify "field already resolved"
@@ -34,6 +34,7 @@
 	beq-	common_errNullObject		/* object was null */
 	lwz	r3, offInstField_byteOffset(r3)	/* r3<- byte offset of field */
 	$load	r3, r20, r3			/* r3<- obj.field (8/16/32 bits) */
+	$barrier				/* acquiring load */
 	.ifnb $mask
 	$mask					/* perform masking (if requested) */
 	.endif

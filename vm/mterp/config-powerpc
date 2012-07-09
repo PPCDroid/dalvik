@@ -38,15 +38,14 @@ import powerpc/entry.S
 
 # opcode list; argument to op-start is default directory
 op-start powerpc
-# TODO: provide native implementations
-op OP_IGET_VOLATILE c
-op OP_IPUT_VOLATILE c
-op OP_SGET_VOLATILE c
-op OP_SPUT_VOLATILE c
-op OP_IGET_OBJECT_VOLATILE c
-op OP_IPUT_OBJECT_VOLATILE c
-op OP_SGET_OBJECT_VOLATILE c
-op OP_SPUT_OBJECT_VOLATILE c
+#op OP_IGET_VOLATILE c
+#op OP_IPUT_VOLATILE c
+#op OP_SGET_VOLATILE c
+#op OP_SPUT_VOLATILE c
+#op OP_IGET_OBJECT_VOLATILE c
+#op OP_IPUT_OBJECT_VOLATILE c
+#op OP_SGET_OBJECT_VOLATILE c
+#op OP_SPUT_OBJECT_VOLATILE c
 op-end
 
 # "helper" code

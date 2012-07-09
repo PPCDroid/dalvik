@@ -1,4 +1,4 @@
-%default { "load":"lwz", "store":"stwx", "mask":"" }
+%default { "load":"lwz", "store":"stwx", "mask":"", "barrier":"/* no-op */" }
 %verify "executed"
 %verify "field already resolved"
 %verify "field not yet resolved"
@@ -28,6 +28,7 @@
 	cmpwi	r3, 0				/* zero? */
 	beq-	common_exceptionThrown		/* yes, exception */
 0:	$load	r3, offStaticField_value(r3)	/* r3<- byte offset of field */
+	$barrier				/* acquiring load */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	.ifnb $mask
 	$mask

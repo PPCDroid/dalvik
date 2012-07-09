@@ -1,4 +1,4 @@
-%default { "load":"lwzx", "store":"stw", "mask":"" }
+%default { "load":"lwzx", "store":"stw", "mask":"", "barrier":"/* no-op */" }
 %verify "executed"
 %verify "field already resolved"
 %verify "field not yet resolved"
@@ -32,5 +32,6 @@
 	.ifnb $mask
 	$mask
 	.endif
+	$barrier				/* releasing store */
 	$store	r4, offStaticField_value(r3)	/* field<- vAA */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */

@@ -1,4 +1,4 @@
-%default { "store":"stwx", "mask":"" }
+%default { "store":"stwx", "mask":"", "barrier":"/* no-op */" }
 %verify "executed"
 %verify "null object"
 %verify "field already resolved"
@@ -38,5 +38,6 @@
 	.ifnb $mask
 	$mask					/* perform masking (if requested) */
 	.endif
+	$barrier				/* releasing store */
 	$store	r3, r20, r4			/* r4<- obj.field (8/16/32 bits) */
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST */
