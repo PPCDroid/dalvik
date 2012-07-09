@@ -221,7 +221,7 @@ common_invokeMethodNoRange:
 	slwi	r6, r8, 2				/* r6 = outsSize << 2 */
 	sub	r6, r11, r6				/* r6<- bottom (newsave - outsSize) */
 
-	cmpw	r6, r5					/* bottom < interpStackEnd? */
+	cmplw	r6, r5					/* bottom < interpStackEnd? */
 	lwz	r6, offMethod_accessFlags(r3)		/* r6<- methodToCall->accessFlags */
 	blt-	.LstackOverflow				/* yes, this frame will overflow stack */
 
