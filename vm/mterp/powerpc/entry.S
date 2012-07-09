@@ -72,6 +72,11 @@ dvmMterpStdRun:
 	stw	r24, 124(r1)	/* r24 */
 	stw	r25, 128(r1)	/* r25 */
 	stw	r26, 132(r1)	/* r26 */
+	stw	r27, 136(r1)	/* r27 */
+	stw	r28, 140(r1)	/* r28 */
+	stw	r29, 144(r1)	/* r29 */
+	stw	r30, 148(r1)	/* r30 */
+	stw	r31, 152(r1)	/* r31 */
 
 	/* save stack pointer for later return. */
 	stw	r1, offGlue_bailPtr(r3)
@@ -149,6 +154,11 @@ dvmMterpStdRun:
 dvmMterpStdBail:
 	lwz	r1, offGlue_bailPtr(r3)
 
+	lwz	r31, 152(r1)	/* r31 */
+	lwz	r30, 148(r1)	/* r30 */
+	lwz	r29, 144(r1)	/* r29 */
+	lwz	r28, 140(r1)	/* r28 */
+	lwz	r27, 136(r1)	/* r27 */
 	lwz	r26, 132(r1)	/* r26 */
 	lwz	r25, 128(r1)	/* r25 */
 	lwz	r24, 124(r1)	/* r24 */
