@@ -36,6 +36,9 @@ common_backwardBranch:
 common_periodicChecks:
 	lwz	r10, offGlue_pSelfSuspendCount(rGLUE)	/* r10<- &suspendCount */
 
+	/* speculatively store r0 before it is clobbered by dvmCheckSuspendPending */
+	stw     r3, offGlue_entryPoint(rGLUE)
+
 #if defined(WITH_DEBUGGER)
 	lwz	r9, offGlue_pDebuggerActive(rGLUE)	/* r9<- &debuggerActive */
 #endif
@@ -75,7 +78,6 @@ common_periodicChecks:
 	b	dvmCheckSuspendPending@plt
 
 3:	add	rPC, rPC, r11				/* debugger/profiler enabled, bail out */
-	stw     r3, offGlue_entryPoint(rGLUE)
 	li      r4, 1                      		/* "want switch" = true */
 	b       common_gotoBail
 
