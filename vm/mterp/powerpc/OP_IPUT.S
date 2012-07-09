@@ -7,7 +7,7 @@
 	/*
 	 * General 32-bit instance field get.
 	 *
-	 * for: iget, iget-object, iget-boolean, iget-byte, iget-char, iget-short
+	 * for: iput, iput-boolean, iput-byte, iput-char, iput-short
 	 */
 	/* op vA, vB, field@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */

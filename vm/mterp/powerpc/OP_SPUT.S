@@ -4,9 +4,9 @@
 %verify "field not yet resolved"
 %verify "field cannot be resolved"
 	/*
-	 * General 32-bit SGET handler.
+	 * General 32-bit SPUT handler.
 	 *
-	 * for: sget, sget-object, sget-boolean, sget-byte, sget-char, sget-short
+	 * for: sput, sput-boolean, sput-byte, sput-char, sput-short
 	 */
 	/* op vAA, field@CCCC */
 	rlwinm	r19,rINST,26,6,29		/* r19<- AA << 2 */

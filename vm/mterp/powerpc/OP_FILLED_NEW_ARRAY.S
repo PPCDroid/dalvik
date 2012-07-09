@@ -45,13 +45,13 @@
 	 */
 .L${opcode}_continue:
 	lwz	r6, offClassObject_descriptor(r3)	/* r6<- arrayClass->descriptor */
-	lbz	r6, 1(r6)			/* r6<- descriptor[1] */
+	lbz	r21, 1(r6)			/* r6<- descriptor[1] */
 
-	cmpwi	r6, 'I'				/* array of ints? */
+	cmpwi	r21, 'I'				/* array of ints? */
 	beq+	0f
-	cmpwi	r6, 'L'				/* array of objects? */
+	cmpwi	r21, 'L'				/* array of objects? */
 	beq	0f
-	cmpwi	r6, '['				/* array of arrays? */
+	cmpwi	r21, '['				/* array of arrays? */
 	beq	0f
 	b	.L${opcode}_notimpl		/* no, not handled yet */
 0:	mr	r4, r20				/* r4<- r20 (length) */
@@ -63,6 +63,7 @@
 	FETCH(r4, 2)				/* r4<- FEDC or CCCC */
 	FETCH_ADVANCE_INST(3)			/* advance to next instr, load rINST */
 	stw     r3, offGlue_retval(rGLUE)	/* retval.l <- new array */
+	stw     r21, offGlue_retval+4(rGLUE)	/* retval.h <- type */
 	addi	r3, r3, offArrayObject_contents	/* r3<- newArray->contents */
 
 	/* r3=array, r4=FEDC, r19<- A << 2, r20 = B */
@@ -94,7 +95,17 @@
 	bdnz+	1b				/* loop while ctr > 0 */
 	.endif
 
-2:	GET_INST_OPCODE_GOTO(r0)		/* r0<- opcode from rINST */
+2:
+	lwz	r3, offGlue_retval(rGLUE)	/* r3<- object */
+	lwz	r4, offGlue_retval+4(rGLUE)	/* r4<- type */
+	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
+	rlwinm	r3, r3, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
+	cmpwi	r4, 'I'				/* array of ints? */
+	beq-	4f
+	stbx	r5, r5, r3
+4:
+
+	GET_INST_OPCODE_GOTO(r0)		/* r0<- opcode from rINST */
 
 	/*
 	 * Throw an exception indicating that we have not implemented this

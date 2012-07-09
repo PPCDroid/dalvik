@@ -1,6 +1,6 @@
 %verify "executed"
 %verify "null object"
-	/* For: iput-quick, iput-object-quick */
+	/* For: iput-quick */
 	/* op vA, vB, offset@CCCC */
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r5,rINST,22,10,29		/* r3<- B << 2 */
