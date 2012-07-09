@@ -9,7 +9,7 @@
 	add     r5, rFP, r5			/* r5<- &fp[A] */
 	lwz	r3, 0(r6)			/* r3/r4<- fp[B] */
 	lwz	r4, 4(r6)
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
+	FETCH_ADVANCE_INST(3)			/* advance rPC, load rINST */
 	stw	r3, 0(r5)			/* fp[A]<- r3/r4 */
 	stw	r4, 4(r5)
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & exec */
