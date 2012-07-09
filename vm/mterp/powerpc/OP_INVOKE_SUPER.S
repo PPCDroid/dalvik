@@ -32,7 +32,7 @@
 	bl	dvmResolveMethod@plt		/* r3<- call(clazz, ref, flags) */
 	cmpwi	r3, 0				/* got null? */
 	beq-	common_exceptionThrown		/* yes, handle exception */
-0:	lwz	r4, offClassObject_super(r20)	/* r4<- method->clazz->super */
+0:	lwz	r4, offClassObject_super(r21)	/* r4<- method->clazz->super */
 	lhz	r5, offMethod_methodIndex(r3)	/* r5<- baseMethod->methodIndex */
 	lwz	r6, offClassObject_vtableCount(r4)	/* r6<- super->vtableCount */
 	cmplw	r5, r6				/* compare (methodIndex, vTableCount) */
