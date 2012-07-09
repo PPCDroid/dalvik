@@ -2341,7 +2341,6 @@ dvmAsmInstructionStart = .L_OP_NOP
 	lwz	r6, offArrayObject_length(r21)	/* r6<- arrayObj->length */
 	cmplw	r4, r6				/* compare unsigned index, length */
 	bge-	common_errArrayIndex		/* index >= length, bail */
-	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 
 	/* r21 = vBB, r4 = vCC, r19 = vAA << 2 */
 	slwi	r4, r4, 2			/* r4<- index*width */
@@ -8688,6 +8687,7 @@ dvmAsmSisterStart:
 	bl	dvmCanPutArrayElement@plt	/* test object type vs. array type */
 	cmpwi	r3, 0				/* okay? */
 	beq-	common_errArrayStore		/* no */
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	stw	r19, offArrayObject_contents(r20) /* vBB[vCC] <- r19*/
 	lwz	r5, offGlue_cardTable(rGLUE)	/* r5<- card table base */
 	rlwinm	r21, r21, 32-GC_CARD_SHIFT, GC_CARD_SHIFT, 31
@@ -8698,6 +8698,7 @@ dvmAsmSisterStart:
 
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
 .LOP_APUT_OBJECT_skip_check:
+	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
 	stw	r19, offArrayObject_contents(r20) /* r19<- vBB[vCC] */
 
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & jump to next insn */
