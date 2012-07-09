@@ -23,7 +23,7 @@ handler-size 128
 # source for the instruction table stub
 asm-stub powerpc/stub.S
 
-# C file header and basic definitions
+# file header and basic definitions
 import c/header.c
 import powerpc/header.S
 
@@ -48,8 +48,9 @@ op-start powerpc
 #op OP_SPUT_OBJECT_VOLATILE c
 op-end
 
-# "helper" code
-import c/gotoTargets.c
+# "helper" code for C; include if you use any of the C stubs (this generates
+# object code, so it's normally excluded)
+##import c/gotoTargets.c
 
 # finish
 import cstubs/enddefs.c
