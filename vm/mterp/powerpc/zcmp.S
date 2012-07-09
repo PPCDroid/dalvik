@@ -1,12 +1,12 @@
 %verify "branch taken"
 %verify "branch not taken"
 	/*
-	* Generic one-operand compare-and-branch operation.  Provide a "revcmp"
-	* fragment that specifies the *reverse* comparison to perform, e.g.
-	* for "if-le" you would use "gt".
-	*
-	* for: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
-	*/
+	 * Generic one-operand compare-and-branch operation.  Provide a "revcmp"
+	 * fragment that specifies the *reverse* comparison to perform, e.g.
+	 * for "if-le" you would use "gt".
+	 *
+	 * For: if-eqz, if-nez, if-ltz, if-gez, if-gtz, if-lez
+	 */
 	/* if-cmp vAA, +BBBB */
 	rlwinm	r3,rINST,26,6,29		/* r7<- AA << 2 */
 	GET_VREG_S(r5, r3)			/* r5<- vA */
