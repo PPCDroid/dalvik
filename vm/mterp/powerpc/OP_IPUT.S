@@ -34,7 +34,7 @@
 	beq-	common_errNullObject		/* object was null */
 	lwz	r4, offInstField_byteOffset(r3)	/* r4<- byte offset of field */
 	FETCH_ADVANCE_INST(2)			/* advance rPC, load rINST */
-	GET_VREG_S(r3, r19)			/* fp[A]<- r0 */
+	GET_VREG_S(r3, r19)			/* fp[A]<- r3 */
 	.ifnb $mask
 	$mask					/* perform masking (if requested) */
 	.endif
