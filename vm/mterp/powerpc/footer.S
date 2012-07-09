@@ -351,6 +351,7 @@ common_exceptionThrown:
 	beq+	1f					/* no skip ahead */
 	mr	rFP, r3					/* save relPc result in rFP */
 	mr	r3, r20					/* r3<- self */
+	mr	r4, r19					/* r4<- exception */
 	bl	dvmCleanupStackOverflow@plt		/* call(self) */
 	mr	r3, rFP					/* restore result */
 
@@ -398,6 +399,7 @@ common_exceptionThrown:
 	cmpwi	r4, 0					/* did we overflow earlier? */
 	beq-	1f					/* yes? */
 	mr	r3, r20					/* r3<- self */
+	mr	r4, r19					/* r4<- exception */
 	bl	dvmCleanupStackOverflow@plt		/* call(self) */
 1:
 	/* may want to show "not caught locally" debug messages here */
