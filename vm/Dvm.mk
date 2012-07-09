@@ -298,6 +298,17 @@ ifeq ($(dvm_arch),x86)
   endif
 endif
 
+ifeq ($(dvm_arch),powerpc)
+  ifeq ($(dvm_os),linux)
+    MTERP_ARCH_KNOWN := true
+    LOCAL_SRC_FILES += \
+		arch/powerpc/Call_legacy_ppc_hw_fp.S \
+		arch/powerpc/Hints_hw_fp.c \
+		mterp/out/InterpC-powerpc.c \
+		mterp/out/InterpAsm-powerpc.S
+  endif
+endif
+
 ifeq ($(dvm_arch),sh)
   MTERP_ARCH_KNOWN := true
   LOCAL_SRC_FILES += \
