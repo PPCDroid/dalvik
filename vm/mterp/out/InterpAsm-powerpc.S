@@ -9107,7 +9107,7 @@ common_gotoBail:
 common_invokeMethodRange:
 .LinvokeNewRange:
 	/* prepare to copy args to "outs" area of current frame */
-	srwi	r5, rINST, 8
+	srwi.	r5, rINST, 8
 	SAVEAREA_FROM_FP(r11, rFP)		/* r11<- stack save area */
 	FETCH(r4, 2)				/* r4<- CCCC, (load here to hide latency) */
 	lhz	r7, offMethod_registersSize(r3)		/* r7<- methodToCall->regsSize */
@@ -9138,8 +9138,7 @@ common_invokeMethodNoRange:
 .LinvokeNewNoRange:
 	/* prepare to copy args to "outs" area of current frame */
 	SAVEAREA_FROM_FP(r11, rFP)		/* r11<- stack save area */
-	srwi	r5, rINST, 12			/* r5<- B (arg count) -- test for zero */
-	cmpwi	r5, 0
+	srwi.	r5, rINST, 12			/* r5<- B (arg count) -- test for zero */
 	FETCH(r4, 2)				/* r4<- GFED, (load here to hide latency) */
 	lhz	r7, offMethod_registersSize(r3)		/* r5<- methodToCall->regsSize */
 	lhz	r8, offMethod_outsSize(r3)		/* r6<- methodToCall->outsSize */
@@ -9324,7 +9323,7 @@ common_returnFromMethod:
 common_exceptionThrown:
 .LexceptionNew:
 	li	r3, kInterpEntryThrow
-	li	r20, 0
+	li	r11, 0
 	bl	common_periodicChecks
 
 	lwz	r20, offGlue_self(rGLUE)		/* r20<- glue->self */
@@ -9332,7 +9331,7 @@ common_exceptionThrown:
 	mr	r4, r20					/* r4<- self */
 	mr	r3, r19					/* r3<- exception */
 	bl	dvmAddTrackedAlloc@plt			/* don't let the exception be GCed */
-	li	r0, 0					/* r0<- NULL */
+	li	r0, 0					/* r3<- NULL */
 	stw	r0, offThread_exception(r20)		/* self->exception = NULL */
 
 	mr	r3, r20					/* r3<- self */
