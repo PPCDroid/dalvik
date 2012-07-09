@@ -3,7 +3,7 @@
 	rlwinm  r19,rINST,26,26,29		/* r19<- (A+ & 15) << 2 */
 	rlwinm  r6,rINST,22,10,29		/* r6<- B << 2 */
 	GET_VREG_F_S(f1, r6)			/* f1<- vB */
-#ifndef KEEP_MAX_MIN_INT_IN_REGS
+#ifndef KEEP_MAX_MIN_LONG_IN_REGS
 	lis	r5, .L${opcode}_table@ha	/* r5<- start of constant table */
 	addi	r5, r5, .L${opcode}_table@l
 	lfs	f0, 0(r5)			/* f0<- max-long in float format */
@@ -31,7 +31,7 @@
 	GET_INST_OPCODE_GOTO(r0)		/* extract opcode from rINST & exec */
 %break
 
-#ifndef KEEP_MAX_MIN_INT_IN_REGS
+#ifndef KEEP_MAX_MIN_LONG_IN_REGS
 	.align	4
 .L${opcode}_table:
 	.float	9223372036854775807	/* max-long */
