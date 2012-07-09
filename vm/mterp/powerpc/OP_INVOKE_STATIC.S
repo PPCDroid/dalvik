@@ -8,13 +8,13 @@
 	 */
 	/* op vB, {vD, vE, vF, vG, vA}, class@CCCC */
 	/* op {vCCCC..v(CCCC+AA-1)}, meth@BBBB */
-	FETCH(r4, 1)				/* r4<- BBBB */
-	slwi	r5, r4, 2			/* r5<- r4 << 2 */
-	EXPORT_PC()				/* must export for invoke */
 	lwz	r6, offGlue_methodClassDex(rGLUE)	/* r6<- pDvmDex */
+	FETCH(r4, 1)				/* r4<- BBBB */
 	lwz	r6, offDvmDex_pResMethods(r6)	/* r6<- pDvmDex->pResMethods */
+	slwi	r5, r4, 2			/* r5<- r4 << 2 */
 	lwzx	r3, r6, r5			/* r3<- resolved methodToCall */
 	cmpwi	r3, 0				/* already resolved? */
+	EXPORT_PC()				/* must export for invoke */
 	bne+	common_invokeMethod${routine}	/* yes, calls */
 	lwz	r6, offGlue_method(rGLUE)	/* r6<- glue->method */
 	lwz	r3, offMethod_clazz(r6)		/* r3<- method->clazz */
