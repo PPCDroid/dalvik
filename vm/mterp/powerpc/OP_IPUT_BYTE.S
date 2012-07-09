@@ -1,2 +1,2 @@
 %verify "executed"
-%include "powerpc/OP_IPUT.S" { "store":"stwx", "mask":"clrlwi	r3, r3, 24" }
+%include "powerpc/OP_IPUT.S" { "store":"stwx", "mask":"extsb	r3, r3" }
