@@ -946,8 +946,10 @@ static void checkMethodArgsV(JNIEnv* env, jmethodID methodID, va_list args,
             }
             break;
         case 'D':       /* 8-byte double */
-        case 'J':       /* 8-byte long */
         case 'F':       /* floats normalized to doubles */
+            (void) va_arg(args, double);
+	    break;
+        case 'J':       /* 8-byte long */
             (void) va_arg(args, u8);
             break;
         default:        /* Z B C S I -- all passed as 32-bit integers */

@@ -473,7 +473,14 @@ void dvmCallMethodV(Thread* self, const Method* method, Object* obj,
     JNIEnv* env = self->jniEnv;
     while (*desc != '\0') {
         switch (*(desc++)) {
-            case 'D': case 'J': {
+	    case 'D': {
+                u8 val = va_arg(args, double);
+                memcpy(ins, &val, 8);       // EABI prevents direct store
+                ins += 2;
+                verifyCount += 2;
+                break;
+            }
+	    case 'J': {
                 u8 val = va_arg(args, u8);
                 memcpy(ins, &val, 8);       // EABI prevents direct store
                 ins += 2;
