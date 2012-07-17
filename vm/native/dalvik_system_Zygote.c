@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 #include <grp.h>
 #include <errno.h>
+#include <endian.h>
 
 #if defined(HAVE_PRCTL)
 # include <sys/prctl.h>
@@ -373,8 +374,13 @@ static pid_t forkAndSpecializeCommon(const u4* args, bool isSystemServer)
          */
         //permittedCapabilities = GET_ARG_LONG(args, 5);
         //effectiveCapabilities = GET_ARG_LONG(args, 7);
+#if BYTE_ORDER == LITTLE_ENDIAN
         permittedCapabilities = args[5] | (int64_t) args[6] << 32;
         effectiveCapabilities = args[7] | (int64_t) args[8] << 32;
+#else
+        permittedCapabilities = args[6] | (int64_t) args[5] << 32;
+        effectiveCapabilities = args[8] | (int64_t) args[7] << 32;
+#endif
     } else {
         permittedCapabilities = effectiveCapabilities = 0;
     }
