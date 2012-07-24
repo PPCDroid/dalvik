@@ -44,27 +44,45 @@
  *
  * PPC Classic (HW FP) JNI hint format:
  * 
- *       NNNN NNNNNNNN LLLLLLL LLLLLLLLL
+ *       LLLL PPPPPPPP PPPPPPP PPPPPPPPP
  *
- *   L - number of words of storage required on the stack
+ *   L - number of double words of storage required on the stack
+ *   P - a 3 bit hint from PowerPCHints determining where to put the argument
  *   N - not used 
- *
- * We always pass back a valid hint.
  */
+enum PowerPCHints {
+    PowerPC_HINT_FLOAT = 0,
+    PowerPC_HINT_U4_REG = 1,
+    PowerPC_HINT_U8_REG = 2,
+    PowerPC_HINT_U8_REG_PAD = 3,
+    PowerPC_HINT_DOUBLE = 4,
+    PowerPC_HINT_U4_STACK = 5,
+    PowerPC_HINT_U8_STACK = 6,
+    PowerPC_HINT_U8_STACK_PAD = 7,
+};
 u4 dvmPlatformInvokeHints(const DexProto* proto)
 {
     const char* sig = dexProtoGetShorty(proto);
     char sigByte;
     u4 stackOffset;
     u4 inIntRegs;
-    s4 inFpRegs;
+    u4 inFpRegs;
+    u4 mask = 1;
+    u4 hints = 0;
+    u4 current;
 
     stackOffset = 0;
     inIntRegs = 5;
-    inFpRegs = 8; /* 8 64bits f1 - f8 are available for float args passing */
+    inFpRegs = 1;
 
     /* Skip past the return type */
     sig++;
+
+    if (strlen(sig) > 8) {
+        LOGV("CALL: %s args overflow\n", dexProtoGetShorty(proto));
+        return DALVIK_JNI_NO_ARG_INFO;
+    }
+
 
     while (true) {
         sigByte = *(sig++);
@@ -78,33 +96,78 @@ u4 dvmPlatformInvokeHints(const DexProto* proto)
          * required
          * folding 64bit in r5-r10 requires padding game, see ABI notes
          */
-	if ((sigByte == 'F') || (sigByte == 'D')) { 
-            if (--inFpRegs < 0)
-                continue;
-         } else {
-            if (inIntRegs < 11) {
-                if (sigByte == 'J') {
-                    if ((inIntRegs & 1) == 0)
-                        inIntRegs++;
-                    inIntRegs++;
+        switch (sigByte) {
+        case 'F':
+            if (inFpRegs <= 8) {
+                current = PowerPC_HINT_FLOAT;
+                inFpRegs += 1;
+            } else {
+                current = PowerPC_HINT_U4_STACK;
+                stackOffset ++;
+            }
+            break;
+        case 'D':
+            if (inFpRegs++ <= 8) {
+                current = PowerPC_HINT_DOUBLE;
+                inFpRegs += 1;
+            } else if (stackOffset & 1) {
+                current = PowerPC_HINT_U8_STACK_PAD;
+                stackOffset += 3; /* 1 for pad, 2 for double */
+            } else {
+                current = PowerPC_HINT_U8_STACK;
+                stackOffset += 2;
+            }
+            break;
+        case 'J':
+            if (inIntRegs <= 9) {
+                if (inIntRegs & 1) {
+                    current = PowerPC_HINT_U8_REG;
+                    inIntRegs += 2;
+                } else {
+                    current = PowerPC_HINT_U8_REG_PAD;
+                    inIntRegs += 3;
                 }
-                inIntRegs++;
-                if ((sigByte != 'J') || (inIntRegs != 13))
-                    continue;
+            } else if (stackOffset & 1) {
+                inIntRegs = 11;
+                current = PowerPC_HINT_U8_STACK_PAD;
+                stackOffset += 3;
+            } else {
+                inIntRegs = 11;
+                current = PowerPC_HINT_U8_STACK;
+                stackOffset += 2;
             }
-         }
-            
-        /* ok, if we're here then a parameter goes on the stack */
-        if (sigByte == 'D' || sigByte == 'J') {
-            if ((stackOffset & 1) != 0) {
-                stackOffset++;
+            break;
+        default:
+            if (inIntRegs <= 10) {
+                current = PowerPC_HINT_U4_REG;
+                inIntRegs += 1;
+            } else {
+                current = PowerPC_HINT_U4_STACK;
+                stackOffset += 1;
             }
-            stackOffset++;
         }
-        stackOffset++;
+
+        hints |= current * mask;
+        mask <<= 3;
     }
 
+    stackOffset++;
+    stackOffset >>= 1; /* Convert to doublewords */
 
-    return stackOffset;
+    if (stackOffset >= (1 << 4)) {
+        LOGV("CALL: %s offset overflow\n", dexProtoGetShorty(proto));
+        return DALVIK_JNI_NO_ARG_INFO;
+    }
+
+    LOGVV("CALL: %s %x %d: %d %d %d %d %d %d %d %d\n", dexProtoGetShorty(proto), hints, stackOffset,
+		    (hints >> (0 * 3)) & 0x7,
+		    (hints >> (1 * 3)) & 0x7,
+		    (hints >> (2 * 3)) & 0x7,
+		    (hints >> (3 * 3)) & 0x7,
+		    (hints >> (4 * 3)) & 0x7,
+		    (hints >> (5 * 3)) & 0x7,
+		    (hints >> (6 * 3)) & 0x7,
+		    (hints >> (7 * 3)) & 0x7);
+    return (stackOffset << 24) | hints;
 }
 
