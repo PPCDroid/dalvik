@@ -266,19 +266,14 @@ unspecified registers or condition codes.
 	addi	r20, _vreg_s, 4; \
 	lwzx	r21, rFP, _vreg_s; \
 	lwzx	r22, rFP, r20; \
-	addi	r1, r1, -8; \
-	stw	r21, 0(r1); \
-	stw	r22, 4(r1); \
-	li	r20, 0; \
-	lfdx	_reg, r1, r20; \
-	addi	r1, r1, 8
+	stw	r21, -8(r1); \
+	stw	r22, -4(r1); \
+	lfd	_reg, -8(r1)
 
 #define SET_VREG_D_S(_reg, _vreg_s) \
-	addi	r1, r1, -8; \
-	stfd	_reg, 0(r1); \
-	lwz	r21, 0(r1); \
-	lwz	r22, 4(r1); \
-	addi	r1, r1, 8; \
+	stfd	_reg, -8(r1); \
+	lwz	r21, -8(r1); \
+	lwz	r22, -4(r1); \
 	stwx	r21, rFP, _vreg_s; \
 	addi	r20, _vreg_s, 4; \
 	stwx	r22, rFP, r20
