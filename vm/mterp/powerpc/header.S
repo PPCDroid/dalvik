@@ -263,20 +263,32 @@ unspecified registers or condition codes.
  * Split 8-byte double into two 4-byte integer and merge them back on the stack to get proper alignment for lfdx.
  */
 #define GET_VREG_D_S(_reg, _vreg_s) \
-	addi	r20, _vreg_s, 4; \
-	lwzx	r21, rFP, _vreg_s; \
-	lwzx	r22, rFP, r20; \
-	stw	r21, -8(r1); \
-	stw	r22, -4(r1); \
-	lfd	_reg, -8(r1)
+	add	r20, rFP, _vreg_s; \
+	andi.	r0, r20, 4; \
+	bne	256f; \
+	lfdx	_reg, rFP, _vreg_s; \
+	b	255f; \
+256:; \
+	lwz	r21, 0(r20); \
+	lwz	r22, 4(r20); \
+	stw	r21, 8(r1); \
+	stw	r22, 12(r1); \
+	lfd	_reg, 8(r1); \
+255: ;
 
 #define SET_VREG_D_S(_reg, _vreg_s) \
-	stfd	_reg, -8(r1); \
-	lwz	r21, -8(r1); \
-	lwz	r22, -4(r1); \
-	stwx	r21, rFP, _vreg_s; \
-	addi	r20, _vreg_s, 4; \
-	stwx	r22, rFP, r20
+	add	r20, rFP, _vreg_s; \
+	andi.	r0, r20, 4; \
+	bne	256f; \
+	stfdx	_reg, rFP, _vreg_s; \
+	b	255f; \
+256:; \
+	stfd	_reg, 8(r1); \
+	lwz	r21, 8(r1); \
+	lwz	r22, 12(r1); \
+	stw	r21, 0(r20); \
+	stw	r22, 4(r20); \
+255: ;
 
 /*
  * This is a #include, not a %include, because we want the C pre-processor
