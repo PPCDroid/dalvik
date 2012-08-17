@@ -36,6 +36,11 @@
 # endif
 #endif
 
+#if defined(__powerpc__)
+# define CLZ(x) __builtin_clz(x)
+# define HAVE_BUILTIN_CLZ
+#endif
+
 #ifndef HAVE_BUILTIN_CLZ
 # define CLZ(x) dvmClzImpl(x)
 int dvmClzImpl(unsigned int x);
